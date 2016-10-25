@@ -90,7 +90,7 @@ class LocalFileProducer(BaseProducer):
                 try:
                     image = np.array(imread(file_name), dtype=np.float32)
                     assert image.ndim == 3 and image.shape[2] == 3
-                except Exception as e:
+                except Exception:
                     print('Exception raised on {}'.format(file_name), end='\033[K\n')
                     os.remove(file_name)
                 else:
@@ -123,9 +123,9 @@ class LocalFileProducer(BaseProducer):
                 shapes=[(), ()],
             )
 
-            (file_name, label) = filename_label_queue.dequeue_many(self.batch_size)
+            (self.file_name, self.label) = filename_label_queue.dequeue_many(self.batch_size)
 
-        return Blob(file_name=file_name, label=label)
+        return Blob(file_name=self.file_name, label=self.label)
 
 
 class PlaceholderProducer(BaseProducer):
@@ -139,8 +139,8 @@ class PlaceholderProducer(BaseProducer):
 
     def blob(self):
         with tf.variable_scope('producer'):
-            file_name = tf.placeholder(tf.string, shape=(None,))
-            label_default = -1 * tf.ones_like(file_name, dtype=tf.int64)
-            label = tf.placeholder_with_default(label_default, shape=(None,))
+            self.file_name = tf.placeholder(tf.string, shape=(None,))
+            label_default = -1 * tf.ones_like(self.file_name, dtype=tf.int64)
+            self.label = tf.placeholder_with_default(label_default, shape=(None,))
 
-        return Blob(file_name=file_name, label=label)
+        return Blob(file_name=self.file_name, label=self.label)

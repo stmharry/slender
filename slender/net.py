@@ -15,6 +15,7 @@ _ARG_SCOPE_FN = resnet_v1.resnet_arg_scope
 
 _SCOPE = _NET.__name__
 _CKPT_PATH = os.path.join(os.path.dirname(__file__), os.pardir, 'model', _SCOPE + '.ckpt')
+
 _ = lambda name: scope_join(_SCOPE, name)
 
 

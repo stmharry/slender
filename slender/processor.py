@@ -5,6 +5,10 @@ import tensorflow as tf
 from .blob import Blob
 from .util import scope_join, identity, imread
 
+_SCOPE = 'processor'
+_MEAN = [123.68, 116.78, 103.94]
+
+_ = lambda name: scope_join(_SCOPE, name)
 
 class Range(object):
     def __init__(self, range_, num_duplicates=1, dtype=tf.float32, pre_fn=identity, post_fn=identity):
@@ -37,9 +41,6 @@ class List(object):
 
 class BaseProcessor(object):
     __metaclass__ = abc.ABCMeta
-
-    _SCOPE = 'processor'
-    _MEAN = [123.68, 116.78, 103.94]
 
     @staticmethod
     def _height_and_width(image):
@@ -132,12 +133,12 @@ class BaseProcessor(object):
 
     @staticmethod
     def _mean_addition(image):
-        image = image + tf.constant(BaseProcessor._MEAN, dtype=tf.float32)
+        image = image + tf.constant(_MEAN, dtype=tf.float32)
         return image
 
     @staticmethod
     def _mean_subtraction(image):
-        image = image - tf.constant(BaseProcessor._MEAN, dtype=tf.float32)
+        image = image - tf.constant(_MEAN, dtype=tf.float32)
         return image
 
     def __init__(self,
@@ -216,7 +217,7 @@ class BaseProcessor(object):
         pass
 
     def preprocess(self, blob):
-        with tf.variable_scope(scope_join(BaseProcessor._SCOPE, 'preprocess')):
+        with tf.variable_scope(_('preprocess')):
             image = tf.map_fn(
                 self.preprocess_single,
                 blob.file_name,
@@ -226,21 +227,23 @@ class BaseProcessor(object):
 
             shape = image.get_shape().as_list()
             new_shape = [-1] + shape[2:]
-            image = tf.reshape(image, new_shape)
+            self.image = tf.reshape(image, new_shape)
 
             self.num_repeats = shape[1]
-            label = tf.reshape(tf.tile(tf.expand_dims(blob.label, 1), (1, self.num_repeats)), (-1,))
+            self.label = tf.reshape(tf.tile(tf.expand_dims(blob.label, 1), (1, self.num_repeats)), (-1,))
 
-        return Blob(image=image, label=label)
+        return Blob(image=self.image, label=self.label)
 
     def postprocess(self, blob):
-        with tf.variable_scope(scope_join(BaseProcessor._SCOPE, 'postprocess')):
+        with tf.variable_scope(_('postprocess')):
             blob_dict = {}
             for (key, value) in blob._dict.iteritems():
                 shape = value.get_shape().as_list()
                 new_shape = [shape[0] / self.num_repeats, self.num_repeats] + shape[1:]
                 value = tf.reshape(value, new_shape)
+                value = tf.reduce_mean(value, 1)
                 blob_dict[key] = value
+                setattr(self, key, value)
 
         return Blob(**blob_dict)
 

@@ -1,7 +1,7 @@
-from foodnet.producer import LocalFileProducer
-from foodnet.processor import TestProcessor
-from foodnet.net import TestNet
-from foodnet.util import latest_working_dir
+from slender.producer import LocalFileProducer
+from slender.processor import TestProcessor
+from slender.net import TestNet
+from slender.util import latest_working_dir
 
 IMAGE_DIR = '/mnt/data/food-img'
 WORKING_DIR = latest_working_dir('/mnt/data/food-save')

@@ -1,5 +1,5 @@
-from foodnet.producer import LocalFileProducer
-from foodnet.util import new_working_dir
+from slender.producer import LocalFileProducer
+from slender.util import new_working_dir
 
 IMAGE_DIR = '/mnt/data/food-img'
 WORKING_DIR = new_working_dir('/mnt/data/food-save')

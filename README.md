@@ -1,26 +1,20 @@
+# Slender: A Wrapper around TensorFlow-Slim for Fast Model Training and Serving
+---
+
+## Fast prototyping
+```python
 from slender.producer import LocalFileProducer
 from slender.processor import TrainProcessor
 from slender.net import TrainNet
-from slender.util import new_working_dir
-
-IMAGE_DIR = '/mnt/data/food-img'
-WORKING_DIR = new_working_dir('/mnt/data/food-save')
-
-BATCH_SIZE = 64
-SUBSAMPLE = 64
-GPU_FRAC = 0.6
-NUM_STEPS = 50000
-DECAY_EPOCHS = 1.5
 
 producer = LocalFileProducer(
     image_dir=IMAGE_DIR,
     working_dir=WORKING_DIR,
     is_training=True,
     batch_size=BATCH_SIZE,
-    subsample_fn=LocalFileProducer.hash_subsample_fn(SUBSAMPLE, divisible=False),
 )
 
-processor = TrainProcessor()
+processor = TrainProcessor(...)
 
 net = TrainNet(
     working_dir=WORKING_DIR,
@@ -31,3 +25,14 @@ net = TrainNet(
 
 blob = producer.blob().func(processor.preprocess).func(net.forward).func(processor.postprocess)
 net.train(NUM_STEPS)
+```
+
+## Image checking
+```python
+producer = LocalFileProducer(
+    image_dir=IMAGE_DIR,
+    working_dir=WORKING_DIR,
+)
+
+producer.check()
+```
