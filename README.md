@@ -1,5 +1,4 @@
 # Slender: A Wrapper around TensorFlow-Slim for Fast Model Training and Serving
----
 
 ## Fast prototyping
 ```python
@@ -29,6 +28,8 @@ net.train(NUM_STEPS)
 
 ## Image checking
 ```python
+from slender.producer import LocalFileProducer
+
 producer = LocalFileProducer(
     image_dir=IMAGE_DIR,
     working_dir=WORKING_DIR,
