@@ -13,7 +13,7 @@ producer = LocalFileProducer(
     batch_size=BATCH_SIZE,
 )
 
-processor = TrainProcessor(...)
+processor = TrainProcessor()
 
 net = TrainNet(
     working_dir=WORKING_DIR,
