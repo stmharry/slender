@@ -239,7 +239,7 @@ class BaseProcessor(object):
             blob_dict = {}
             for (key, value) in blob._dict.iteritems():
                 shape = value.get_shape().as_list()
-                new_shape = [shape[0] / self.num_repeats, self.num_repeats] + shape[1:]
+                new_shape = [-1, self.num_repeats] + shape[1:]
                 value = tf.reshape(value, new_shape)
                 value = tf.reduce_mean(value, 1)
                 blob_dict[key] = value
@@ -284,7 +284,7 @@ class TrainProcessor(BaseProcessor):
 class TestProcessor(BaseProcessor):
     def __init__(self,
                  net_dim=None,
-                 shorter_dim=List([256, 384, 512]),
+                 shorter_dim=List([256]),
                  aspect_ratio=List([1.0]),
                  delta=List([0]),
                  contrast=List([1.0]),

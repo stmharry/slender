@@ -53,7 +53,7 @@ class LocalFileProducer(BaseProducer):
         self.batch_size = batch_size
 
         if is_training:
-            self.class_names = sorted([
+            self.class_names = np.sort([
                 class_name
                 for class_name in os.listdir(image_dir)
                 if os.path.isdir(os.path.join(image_dir, class_name))
@@ -72,6 +72,7 @@ class LocalFileProducer(BaseProducer):
             ] for class_name in self.class_names
         ]
         self.num_files = sum(map(len, self.filenames_per_class))
+        self.num_batches_per_epoch = self.num_files // self.batch_size
 
     def check(self):
         for (num_class, (class_name, file_names)) in enumerate(zip(self.class_names, self.filenames_per_class)):

@@ -215,3 +215,37 @@ class TestNet(BaseNet):
             session_config=self.session_config,
             timeout=timeout,
         )
+
+
+class OnlineNet(BaseNet):
+    def __init__(self,
+                 working_dir,
+                 num_classes,
+                 gpu_frac=1.0,
+                 verbosity=tf.logging.INFO):
+
+        super(OnlineNet, self).__init__(
+            working_dir=working_dir,
+            num_classes=num_classes,
+            gpu_frac=gpu_frac,
+            is_training=False,
+            verbosity=verbosity,
+        )
+
+        self.sess = None
+
+    def _forward(self):
+        self.variables_to_restore = list(BaseNet.get_scopes())
+        (self.init_assign_op, self.init_feed_dict) = slim.assign_from_checkpoint(tf.train.latest_checkpoint(self.working_dir), self.variables_to_restore)
+
+    def init(self, blob):
+        self.sess = tf.Session()
+        self.sess.run(self.init_assign_op, feed_dict=self.init_feed_dict)
+
+        return Blob(sess=self.sess, **blob._dict)
+
+    def online(self, blob, feed_dict=None):
+        blob_val = blob.eval(self.sess, feed_dict=feed_dict)
+        return blob_val
+
+
