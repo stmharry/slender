@@ -1,4 +1,5 @@
 import abc
+import itertools
 import os
 import tensorflow as tf
 
@@ -41,6 +42,12 @@ class List(object):
 
 class BaseProcessor(object):
     __metaclass__ = abc.ABCMeta
+
+    @staticmethod
+    def _filename_to_image(file_name):
+        image = tf.py_func(imread, [file_name], tf.float32)
+        image.set_shape((None, None, 3))
+        return image
 
     @staticmethod
     def _height_and_width(image):
@@ -141,6 +148,13 @@ class BaseProcessor(object):
         image = image - tf.constant(_MEAN, dtype=tf.float32)
         return image
 
+    @staticmethod
+    def _apply(func, arg_list_dict):
+        return [
+            func(**dict(zip(arg_list_dict.keys(), arg_value)))
+            for arg_value in itertools.product(*arg_list_dict.values())
+        ]
+
     def __init__(self,
                  net_dim,
                  shorter_dim,
@@ -161,56 +175,43 @@ class BaseProcessor(object):
         self.num_duplicates = num_duplicates
         self.num_threads = num_threads
 
-    def filename_to_image(self, file_name):
-        image = tf.py_func(imread, [file_name], tf.float32)
-        image.set_shape(self.shape)
-        return image
-
     def resize(self, images):
-        images = [
-            BaseProcessor._resize(image, shorter_dim=shorter_dim, aspect_ratio=aspect_ratio)
-            for image in images
-            for shorter_dim in self.shorter_dim.get()
-            for aspect_ratio in (self.aspect_ratio.get() if not self.is_keep_aspect_ratio else [None])
-        ]
-        return images
+        return BaseProcessor._apply(BaseProcessor._resize, {
+            'image': images,
+            'shorter_dim': self.shorter_dim.get(),
+            'aspect_ratio': self.aspect_ratio.get() if not self.is_keep_aspect_ratio else [None],
+        })
 
     def random_crop(self, images):
-        images = [
-            BaseProcessor._random_crop(image, crop_height=self.net_dim, crop_width=self.net_dim)
-            for image in images
-        ]
-        return images
+        return BaseProcessor._apply(BaseProcessor._random_crop, {
+            'image': images,
+            'crop_height': [self.net_dim],
+            'crop_width': [self.net_dim],
+        })
 
     def central_crop_or_pad(self, images):
-        images = [
-            BaseProcessor._central_crop_or_pad(image, target_height=self.net_dim, target_width=self.net_dim)
-            for image in images
-        ]
-        return images
+        return BaseProcessor._apply(BaseProcessor._central_crop_or_pad, {
+            'image': images,
+            'target_height': [self.net_dim],
+            'target_width': [self.net_dim],
+        })
 
     def random_flip(self, images):
-        images = [
-            BaseProcessor._random_flip(image)
-            for image in images
-        ]
-        return images
+        return BaseProcessor._apply(BaseProcessor._random_flip, {
+            'image': images,
+        })
 
     def adjust(self, images):
-        images = [
-            BaseProcessor._adjust(image, delta=delta, contrast=contrast)
-            for image in images
-            for delta in self.delta.get()
-            for contrast in self.contrast.get()
-        ]
-        return images
+        return BaseProcessor._apply(BaseProcessor._adjust, {
+            'image': images,
+            'delta': self.delta.get(),
+            'contrast': self.contrast.get(),
+        })
 
     def mean_subtraction(self, images):
-        images = [
-            BaseProcessor._mean_subtraction(image)
-            for image in images
-        ]
-        return images
+        return BaseProcessor._apply(BaseProcessor._mean_subtraction, {
+            'image': images,
+        })
 
     @abc.abstractmethod
     def preprocess_single(self, file_name):
@@ -271,7 +272,7 @@ class TrainProcessor(BaseProcessor):
         )
 
     def preprocess_single(self, file_name):
-        images = [self.filename_to_image(file_name)] * self.num_duplicates
+        images = [self._filename_to_image(file_name)] * self.num_duplicates
         images = self.mean_subtraction(images)
         images = self.resize(images)
         images = self.random_crop(images)
@@ -304,7 +305,7 @@ class TestProcessor(BaseProcessor):
         )
 
     def preprocess_single(self, file_name):
-        images = [self.filename_to_image(file_name)] * self.num_duplicates
+        images = [self._filename_to_image(file_name)] * self.num_duplicates
         images = self.mean_subtraction(images)
         images = self.resize(images)
         images = self.central_crop_or_pad(images)

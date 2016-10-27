@@ -1,14 +1,10 @@
 import numpy as np
-import os
-import sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from slender.producer import PlaceholderProducer
 from slender.processor import TestProcessor
 from slender.net import OnlineNet
-from slender.util import latest_working_dir
 
-BATCH_SIZE = 16
+BATCH_SIZE = 64
 GPU_FRAC = 1.0
 
 
