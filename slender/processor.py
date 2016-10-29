@@ -4,12 +4,13 @@ import os
 import tensorflow as tf
 
 from .blob import Blob
-from .util import scope_join, identity, imread
+from .util import scope_join, identity, read
 
 _SCOPE = 'processor'
 _MEAN = [123.68, 116.78, 103.94]
 
 _ = lambda name: scope_join(_SCOPE, name)
+
 
 class Range(object):
     def __init__(self, range_, num_duplicates=1, dtype=tf.float32, pre_fn=identity, post_fn=identity):
@@ -45,8 +46,10 @@ class BaseProcessor(object):
 
     @staticmethod
     def _filename_to_image(file_name):
-        image = tf.py_func(imread, [file_name], tf.float32)
+        content = tf.py_func(read, [file_name], tf.string)
+        image = tf.image.decode_jpeg(content, channels=3)
         image.set_shape((None, None, 3))
+        image = tf.to_float(image)
         return image
 
     @staticmethod
@@ -55,10 +58,19 @@ class BaseProcessor(object):
         return (shape[0], shape[1])
 
     @staticmethod
+    def _set_shape(image, shape):
+        image.set_shape(shape)
+        return image
+
+    @staticmethod
+    def _mean_subtraction(image):
+        image = image - tf.constant(_MEAN, dtype=tf.float32)
+        return image
+
+    @staticmethod
     def _resize(image, shorter_dim, aspect_ratio=None):
         if aspect_ratio is None:
             (original_height, original_width) = BaseProcessor._height_and_width(image)
-
             aspect_ratio = tf.truediv(original_width, original_height)
 
         resize_dims = tf.cond(
@@ -139,16 +151,6 @@ class BaseProcessor(object):
         return image
 
     @staticmethod
-    def _mean_addition(image):
-        image = image + tf.constant(_MEAN, dtype=tf.float32)
-        return image
-
-    @staticmethod
-    def _mean_subtraction(image):
-        image = image - tf.constant(_MEAN, dtype=tf.float32)
-        return image
-
-    @staticmethod
     def _apply(func, arg_list_dict):
         return [
             func(**dict(zip(arg_list_dict.keys(), arg_value)))
@@ -174,6 +176,17 @@ class BaseProcessor(object):
         self.is_keep_aspect_ratio = is_keep_aspect_ratio
         self.num_duplicates = num_duplicates
         self.num_threads = num_threads
+
+    def set_shape(self, images):
+        return BaseProcessor._apply(BaseProcessor._set_shape, {
+            'image': images,
+            'shape': [self.shape],
+        })
+
+    def mean_subtraction(self, images):
+        return BaseProcessor._apply(BaseProcessor._mean_subtraction, {
+            'image': images,
+        })
 
     def resize(self, images):
         return BaseProcessor._apply(BaseProcessor._resize, {
@@ -206,11 +219,6 @@ class BaseProcessor(object):
             'image': images,
             'delta': self.delta.get(),
             'contrast': self.contrast.get(),
-        })
-
-    def mean_subtraction(self, images):
-        return BaseProcessor._apply(BaseProcessor._mean_subtraction, {
-            'image': images,
         })
 
     @abc.abstractmethod
@@ -287,8 +295,8 @@ class TestProcessor(BaseProcessor):
                  net_dim=None,
                  shorter_dim=List([256]),
                  aspect_ratio=List([1.0]),
-                 delta=List([0]),
-                 contrast=List([1.0]),
+                 delta=None,
+                 contrast=None,
                  is_keep_aspect_ratio=False,
                  num_duplicates=1,
                  num_threads=8):
@@ -309,5 +317,35 @@ class TestProcessor(BaseProcessor):
         images = self.mean_subtraction(images)
         images = self.resize(images)
         images = self.central_crop_or_pad(images)
+        image = tf.pack(images)
+        return image
+
+
+class OnlineProcessor(BaseProcessor):
+    def __init__(self,
+                 net_dim,
+                 shorter_dim=None,
+                 aspect_ratio=None,
+                 delta=None,
+                 contrast=None,
+                 is_keep_aspect_ratio=None,
+                 num_duplicates=1,
+                 num_threads=8):
+
+        super(OnlineProcessor, self).__init__(
+            net_dim=net_dim,
+            shorter_dim=shorter_dim,
+            aspect_ratio=aspect_ratio,
+            delta=delta,
+            contrast=contrast,
+            is_keep_aspect_ratio=is_keep_aspect_ratio,
+            num_duplicates=num_duplicates,
+            num_threads=num_threads,
+        )
+
+    def preprocess_single(self, file_name):
+        images = [self._filename_to_image(file_name)] * self.num_duplicates
+        images = self.mean_subtraction(images)
+        images = self.set_shape(images)
         image = tf.pack(images)
         return image

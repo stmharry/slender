@@ -1,9 +1,15 @@
+import cStringIO
 import numpy as np
 import os
-import skimage.io
+import re
+import requests
 import tensorflow as tf
 import time
 import PIL.Image
+
+
+URL_REGEX = re.compile(r'http://|https://|ftp://|file://|file:\\')
+SESSION = requests.Session()
 
 ''' Directory
 '''
@@ -24,12 +30,19 @@ scope_join = os.path.join
 
 ''' Image
 '''
+def read(file_name):
+    if URL_REGEX.match(file_name) is not None:
+        r = SESSION.get(file_name)
+        fp = cStringIO.StringIO(r.content)
+    else:
+        fp = open(file_name, 'rb')
 
-def imread(file_name):
-    with skimage.io.util.file_or_url_context(file_name) as file_name:
-        return np.array(PIL.Image.open(file_name), dtype=np.float32)
+    s = np.array(fp.read())
+    fp.close()
+    return s
 
-''' Utility
+
+''' Utility function
 '''
 def identity(x):
     return x

@@ -2,19 +2,21 @@ from __future__ import print_function
 
 import numpy as np
 import os
+import PIL.Image
 import sys
 import tensorflow as tf
 
 from .blob import Blob
-from .util import imread
+from .util import read
 
 
 class BaseProducer(object):
+    _SCOPE = 'producer'
     _CLASSNAME_NAME = 'class_names.txt'
     _BUFFER_CAPACITY = 128
 
     @staticmethod
-    def get_queue(values, dtypes, shapes):
+    def get_queue_enqueue(values, dtypes, shapes):
         queue = tf.FIFOQueue(
             capacity=BaseProducer._BUFFER_CAPACITY,
             dtypes=dtypes,
@@ -24,11 +26,23 @@ class BaseProducer(object):
         queue_runner = tf.train.QueueRunner(queue, [enqueue])
         tf.train.add_queue_runner(queue_runner)
 
-        return queue
+        return (queue, enqueue)
 
-    def __init__(self, working_dir):
+    def __init__(self, working_dir, image_dir=None):
         self.working_dir = working_dir
         self.classname_path = os.path.join(working_dir, BaseProducer._CLASSNAME_NAME)
+        self.image_dir = image_dir
+
+        if os.path.isfile(self.classname_path):
+            self.class_names = np.loadtxt(self.classname_path, dtype=np.str)
+        else:
+            self.class_names = np.sort([
+                class_name
+                for class_name in os.listdir(image_dir)
+                if os.path.isdir(os.path.join(image_dir, class_name))
+            ])
+            np.savetxt(self.classname_path, self.class_names, fmt='%s')
+        self.num_classes = len(self.class_names)
 
 
 class LocalFileProducer(BaseProducer):
@@ -41,27 +55,16 @@ class LocalFileProducer(BaseProducer):
     def __init__(self,
                  image_dir,
                  working_dir,
-                 is_training=True,
                  batch_size=1,
                  subsample_fn=lambda v: True):
 
         super(LocalFileProducer, self).__init__(
             working_dir=working_dir,
+            image_dir=image_dir,
         )
 
         self.is_training = is_training
         self.batch_size = batch_size
-
-        if is_training:
-            self.class_names = np.sort([
-                class_name
-                for class_name in os.listdir(image_dir)
-                if os.path.isdir(os.path.join(image_dir, class_name))
-            ])
-            np.savetxt(self.classname_path, self.class_names, fmt='%s')
-        else:
-            self.class_names = np.loadtxt(self.classname_path, dtype=np.str)
-        self.num_classes = len(self.class_names)
 
         self.filenames_per_class = [[
             os.path.join(file_dir, file_name)
@@ -89,7 +92,7 @@ class LocalFileProducer(BaseProducer):
                 sys.stdout.flush()
 
                 try:
-                    image = np.array(imread(file_name), dtype=np.float32)
+                    image = np.array(PIL.Image.open(file_name), dtype=np.float32)
                     assert image.ndim == 3 and image.shape[2] == 3
                 except Exception:
                     print('Exception raised on {}'.format(file_name), end='\033[K\n')
@@ -102,7 +105,7 @@ class LocalFileProducer(BaseProducer):
             self.filenames_per_class[num_class] = file_names_
 
     def blob(self):
-        with tf.variable_scope('producer'):
+        with tf.variable_scope(BaseProducer._SCOPE):
             if self.is_training:
                 filename_per_class = [
                     tf.train.string_input_producer(file_names).dequeue()
@@ -118,7 +121,7 @@ class LocalFileProducer(BaseProducer):
                     for file_name in file_names
                 ])
 
-            filename_label_queue = BaseProducer.get_queue(
+            (filename_label_queue, _) = BaseProducer.get_queue_enqueue(
                 [file_names, labels],
                 dtypes=[tf.string, tf.int64],
                 shapes=[(), ()],
@@ -135,11 +138,8 @@ class PlaceholderProducer(BaseProducer):
             working_dir=working_dir,
         )
 
-        self.class_names = np.loadtxt(self.classname_path, dtype=np.str)
-        self.num_classes = len(self.class_names)
-
     def blob(self):
-        with tf.variable_scope('producer'):
+        with tf.variable_scope(BaseProducer._SCOPE):
             self.file_name = tf.placeholder(tf.string, shape=(None,))
             label_default = -1 * tf.ones_like(self.file_name, dtype=tf.int64)
             self.label = tf.placeholder_with_default(label_default, shape=(None,))

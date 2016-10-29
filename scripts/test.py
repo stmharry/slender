@@ -1,13 +1,13 @@
-from slender.producer import LocalFileProducer
-from slender.processor import TestProcessor
-from slender.net import TestNet
+from slender.producer import LocalFileProducer as Producer
+from slender.processor import TestProcessor as Processor
+from slender.net import TestNet as Net
 from slender.util import latest_working_dir
 
 IMAGE_DIR = '/mnt/data/food-img'
 WORKING_DIR = latest_working_dir('/mnt/data/food-save')
 
 BATCH_SIZE = 4
-SUBSAMPLE_FN = LocalFileProducer.hash_subsample_fn(64, divisible=True),
+SUBSAMPLE_FN = Producer.hash_subsample_fn(64, divisible=True),
 GPU_FRAC = 0.3
 
 
@@ -19,21 +19,23 @@ class Factory(object):
                  subsample_fn=SUBSAMPLE_FN,
                  gpu_frac=GPU_FRAC):
 
-        self.producer = LocalFileProducer(
+        self.producer = Producer(
             image_dir=image_dir,
             working_dir=working_dir,
             is_training=False,
             batch_size=batch_size,
             subsample_fn=subsample_fn,
         )
-        self.processor = TestProcessor()
-        self.net = TestNet(
+        self.processor = Processor()
+        self.net = Net(
             working_dir=working_dir,
             num_classes=self.producer.num_classes,
             gpu_frac=gpu_frac,
         )
-        self.blob = self.producer.blob().func(self.processor.preprocess).func(self.net.forward)
-
+        self.blob = self.producer.blob().funcs([
+            self.processor.preprocess,
+            self.net.forward,
+        ])
         self.__dict__.update(locals())
 
     def run(self):

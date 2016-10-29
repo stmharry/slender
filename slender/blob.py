@@ -6,9 +6,15 @@ class Blob(object):
         for (key, value) in kwargs.iteritems():
             setattr(self, key, value)
 
-    def func(self, f):
-        return f(self)
+    def func(self, fn):
+        return fn(self)
 
-    def eval(self, feed_dict=None):
-        output = self.sess.run(self._dict, feed_dict=feed_dict)
+    def funcs(self, fns):
+        if fns:
+            return fns[0](self).funcs(fns[1:])
+        else:
+            return self
+
+    def eval(self, **kwargs):
+        output = self.sess.run(self._dict, **kwargs)
         return Blob(**output)

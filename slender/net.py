@@ -16,7 +16,9 @@ _ARG_SCOPE_FN = resnet_v1.resnet_arg_scope
 _SCOPE = _NET.__name__
 _CKPT_PATH = os.path.join(os.path.dirname(__file__), os.pardir, 'model', _SCOPE + '.ckpt')
 
-_ = lambda name: scope_join(_SCOPE, name)
+
+def _(name):
+    return scope_join(_SCOPE, name)
 
 
 class BaseNet(object):
@@ -54,6 +56,7 @@ class BaseNet(object):
                  num_classes,
                  is_training,
                  gpu_frac,
+                 log_device_placement,
                  verbosity):
 
         self.working_dir = working_dir
@@ -61,6 +64,7 @@ class BaseNet(object):
         self.arg_scope = _ARG_SCOPE_FN(is_training=is_training)
         self.session_config = tf.ConfigProto(
             gpu_options=tf.GPUOptions(per_process_gpu_memory_fraction=gpu_frac),
+            log_device_placement=log_device_placement,
         )
 
         tf.logging.set_verbosity(verbosity)
@@ -112,6 +116,7 @@ class TrainNet(BaseNet):
                  learning_rate_decay_steps=None,
                  learning_rate_decay_rate=0.5,
                  gpu_frac=1.0,
+                 log_device_placement=False,
                  verbosity=tf.logging.INFO):
 
         super(TrainNet, self).__init__(
@@ -119,6 +124,7 @@ class TrainNet(BaseNet):
             num_classes=num_classes,
             is_training=True,
             gpu_frac=gpu_frac,
+            log_device_placement=log_device_placement,
             verbosity=verbosity,
         )
 
@@ -179,11 +185,13 @@ class TrainNet(BaseNet):
             session_config=self.session_config,
         )
 
+
 class TestNet(BaseNet):
     def __init__(self,
                  working_dir,
                  num_classes,
                  gpu_frac=1.0,
+                 log_device_placement=False,
                  verbosity=tf.logging.INFO):
 
         super(TestNet, self).__init__(
@@ -191,6 +199,7 @@ class TestNet(BaseNet):
             num_classes=num_classes,
             gpu_frac=gpu_frac,
             is_training=False,
+            log_device_placement=log_device_placement,
             verbosity=verbosity,
         )
 
@@ -222,6 +231,7 @@ class OnlineNet(BaseNet):
                  working_dir,
                  num_classes,
                  gpu_frac=1.0,
+                 log_device_placement=False,
                  verbosity=tf.logging.INFO):
 
         super(OnlineNet, self).__init__(
@@ -229,6 +239,7 @@ class OnlineNet(BaseNet):
             num_classes=num_classes,
             gpu_frac=gpu_frac,
             is_training=False,
+            log_device_placement=log_device_placement,
             verbosity=verbosity,
         )
 
@@ -239,7 +250,9 @@ class OnlineNet(BaseNet):
         (self.init_assign_op, self.init_feed_dict) = slim.assign_from_checkpoint(tf.train.latest_checkpoint(self.working_dir), self.variables_to_restore)
 
     def init(self, blob):
-        self.sess = tf.Session()
+        self.sess = tf.Session(
+            config=self.session_config,
+        )
         self.sess.run(self.init_assign_op, feed_dict=self.init_feed_dict)
 
         return Blob(sess=self.sess, **blob._dict)
@@ -247,5 +260,3 @@ class OnlineNet(BaseNet):
     def online(self, blob, feed_dict=None):
         blob_val = blob.eval(self.sess, feed_dict=feed_dict)
         return blob_val
-
-
