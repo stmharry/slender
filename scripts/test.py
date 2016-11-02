@@ -19,22 +19,21 @@ class Factory(object):
                  subsample_fn=SUBSAMPLE_FN,
                  gpu_frac=GPU_FRAC):
 
-        self.producer = Producer(
+        producer = Producer(
             image_dir=image_dir,
             working_dir=working_dir,
-            is_training=False,
             batch_size=batch_size,
             subsample_fn=subsample_fn,
         )
-        self.processor = Processor()
-        self.net = Net(
+        processor = Processor()
+        net = Net(
             working_dir=working_dir,
-            num_classes=self.producer.num_classes,
+            num_classes=producer.num_classes,
             gpu_frac=gpu_frac,
         )
-        self.blob = self.producer.blob().funcs([
-            self.processor.preprocess,
-            self.net.forward,
+        blob = producer.blob().funcs([
+            processor.preprocess,
+            net.forward,
         ])
         self.__dict__.update(locals())
 

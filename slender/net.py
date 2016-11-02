@@ -5,7 +5,7 @@ import tensorflow as tf
 from tensorflow.contrib.slim.nets import resnet_v1
 
 from .blob import Blob
-from .util import scope_join
+from .util import scope_join_fn
 
 slim = tf.contrib.slim
 
@@ -16,9 +16,7 @@ _ARG_SCOPE_FN = resnet_v1.resnet_arg_scope
 _SCOPE = _NET.__name__
 _CKPT_PATH = os.path.join(os.path.dirname(__file__), os.pardir, 'model', _SCOPE + '.ckpt')
 
-
-def _(name):
-    return scope_join(_SCOPE, name)
+_ = scope_join_fn(_SCOPE)
 
 
 class BaseNet(object):

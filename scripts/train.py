@@ -23,23 +23,22 @@ class Factory(object):
                  num_train_epochs=NUM_TRAIN_EPOCHS,
                  num_decay_epochs=NUM_DECAY_EPOCHS):
 
-        self.producer = Producer(
+        producer = Producer(
             image_dir=image_dir,
             working_dir=working_dir,
-            is_training=True,
             batch_size=batch_size,
             subsample_fn=subsample_fn,
         )
-        self.processor = Processor()
-        self.net = Net(
+        processor = Processor()
+        net = Net(
             working_dir=working_dir,
-            num_classes=self.producer.num_classes,
-            learning_rate_decay_steps=num_decay_epochs * self.producer.num_batches_per_epoch,
+            num_classes=producer.num_classes,
+            learning_rate_decay_steps=num_decay_epochs * producer.num_batches_per_epoch,
             gpu_frac=gpu_frac,
         )
-        self.blob = self.producer.blob().funcs([
-            self.processor.preprocess,
-            self.net.forward,
+        blob = producer.blob().funcs([
+            processor.preprocess,
+            net.forward,
         ])
         self.__dict__.update(locals())
 

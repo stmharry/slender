@@ -1,15 +1,8 @@
-import cStringIO
 import numpy as np
 import os
-import re
-import requests
 import tensorflow as tf
 import time
-import PIL.Image
 
-
-URL_REGEX = re.compile(r'http://|https://|ftp://|file://|file:\\')
-SESSION = requests.Session()
 
 ''' Directory
 '''
@@ -26,26 +19,10 @@ def latest_working_dir(working_dir_root):
 
 ''' Scope
 '''
-scope_join = os.path.join
-
-''' Image
-'''
-def read(file_name):
-    if URL_REGEX.match(file_name) is not None:
-        r = SESSION.get(file_name)
-        fp = cStringIO.StringIO(r.content)
-    else:
-        fp = open(file_name, 'rb')
-
-    s = np.array(fp.read())
-    fp.close()
-    return s
-
-
-''' Utility function
-'''
-def identity(x):
-    return x
+def scope_join_fn(scope):
+    def scope_join(*args):
+        return os.path.join(scope, *args)
+    return scope_join
 
 
 ''' DEBUG
