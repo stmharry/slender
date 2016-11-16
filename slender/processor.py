@@ -34,7 +34,10 @@ class List(object):
         self.dtype = dtype
 
     def get(self):
-        val_list = [tf.constant(val, dtype=self.dtype) for val in self.val_list]
+        val_list = [
+            tf.constant(val, dtype=self.dtype) if val is not None else None
+            for val in self.val_list
+        ]
         return val_list
 
 
@@ -161,7 +164,6 @@ class BaseProcessor(object):
                  aspect_ratio=None,
                  delta=None,
                  contrast=None,
-                 is_keep_aspect_ratio=None,
                  num_duplicates=1,
                  batch_size=64):
 
@@ -171,7 +173,6 @@ class BaseProcessor(object):
         self.aspect_ratio = aspect_ratio
         self.delta = delta
         self.contrast = contrast
-        self.is_keep_aspect_ratio = is_keep_aspect_ratio
         self.num_duplicates = num_duplicates
         self.batch_size = batch_size
 
@@ -190,7 +191,7 @@ class BaseProcessor(object):
         return BaseProcessor._apply(BaseProcessor._resize, {
             'image': images,
             'shorter_dim': self.shorter_dim.get(),
-            'aspect_ratio': self.aspect_ratio.get() if not self.is_keep_aspect_ratio else [None],
+            'aspect_ratio': self.aspect_ratio.get(),
         })
 
     def random_crop(self, images):
@@ -262,7 +263,6 @@ class TrainProcessor(BaseProcessor):
                  aspect_ratio=Range((0.5, 2.0)),
                  delta=Range((-64, 64)),
                  contrast=Range((0.5, 1.5)),
-                 is_keep_aspect_ratio=False,
                  num_duplicates=1,
                  batch_size=64):
 
@@ -272,7 +272,6 @@ class TrainProcessor(BaseProcessor):
             aspect_ratio=aspect_ratio,
             delta=delta,
             contrast=contrast,
-            is_keep_aspect_ratio=is_keep_aspect_ratio,
             num_duplicates=num_duplicates,
             batch_size=batch_size,
         )
@@ -293,7 +292,6 @@ class TestProcessor(BaseProcessor):
                  net_dim=None,
                  shorter_dim=List([256]),
                  aspect_ratio=List([1.0]),
-                 is_keep_aspect_ratio=False,
                  num_duplicates=1,
                  batch_size=64):
 
@@ -301,7 +299,6 @@ class TestProcessor(BaseProcessor):
             net_dim=net_dim or max(shorter_dim.val_list),
             shorter_dim=shorter_dim,
             aspect_ratio=aspect_ratio,
-            is_keep_aspect_ratio=is_keep_aspect_ratio,
             num_duplicates=num_duplicates,
             batch_size=batch_size,
         )
@@ -315,19 +312,23 @@ class TestProcessor(BaseProcessor):
         return image
 
 
-class SimpleProcessor(BaseProcessor):
+class DebugProcessor(BaseProcessor):
     def __init__(self,
-                 net_dim,
+                 net_dim=None,
+                 shorter_dim=List([256]),
+                 aspect_ratio=List([1.0]),
                  batch_size=64):
 
-        super(SimpleProcessor, self).__init__(
-            net_dim=net_dim,
+        super(DebugProcessor, self).__init__(
+            net_dim=net_dim or max(shorter_dim.val_list),
+            shorter_dim=shorter_dim,
+            aspect_ratio=aspect_ratio,
             batch_size=batch_size,
         )
 
     def preprocess_single(self, content):
         images = [BaseProcessor._decode(content)] * self.num_duplicates
-        images = self.mean_subtraction(images)
-        images = self.set_shape(images)
+        images = self.resize(images)
+        images = self.central_crop_or_pad(images)
         image = tf.pack(images)
         return image

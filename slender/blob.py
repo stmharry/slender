@@ -1,8 +1,6 @@
 class Blob(object):
-    def __init__(self, sess=None, **kwargs):
-        self.sess = sess
+    def __init__(self, **kwargs):
         self._dict = kwargs
-
         for (key, value) in kwargs.iteritems():
             setattr(self, key, value)
 
@@ -15,6 +13,6 @@ class Blob(object):
         else:
             return self
 
-    def eval(self, **kwargs):
-        output = self.sess.run(self._dict, **kwargs)
+    def eval(self, sess, **kwargs):
+        output = sess.run(self._dict, **kwargs)
         return Blob(**output)

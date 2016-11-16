@@ -3,11 +3,12 @@ from slender.processor import TestProcessor as Processor
 from slender.net import TestNet as Net
 from slender.util import latest_working_dir
 
-IMAGE_DIR = '/mnt/data/food-img'
-WORKING_DIR = latest_working_dir('/mnt/data/food-save')
+from env import IMAGE_DIR, WORKING_DIR_ROOT
 
-BATCH_SIZE = 4
-SUBSAMPLE_FN = Producer.hash_subsample_fn(64, divisible=True),
+WORKING_DIR = latest_working_dir(WORKING_DIR_ROOT)
+BATCH_SIZE = 16
+SUBSAMPLE_FN = Producer.SubsampleFunction.HASH(mod=64, divisible=True)
+MIX_SCHEME = Producer.MixScheme.NONE
 GPU_FRAC = 0.3
 
 
@@ -17,6 +18,7 @@ class Factory(object):
                  working_dir=WORKING_DIR,
                  batch_size=BATCH_SIZE,
                  subsample_fn=SUBSAMPLE_FN,
+                 mix_scheme=MIX_SCHEME,
                  gpu_frac=GPU_FRAC):
 
         producer = Producer(
@@ -24,6 +26,7 @@ class Factory(object):
             working_dir=working_dir,
             batch_size=batch_size,
             subsample_fn=subsample_fn,
+            mix_scheme=mix_scheme,
         )
         processor = Processor()
         net = Net(

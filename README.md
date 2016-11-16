@@ -21,7 +21,7 @@ producer = Producer(
     batch_size=BATCH_SIZE,
 )
 processor = Processor()
-net = TrainNet(
+net = Net(
     working_dir=WORKING_DIR,
     num_classes=producer.num_classes,
     learning_rate_decay_steps=NUM_DECAY_EPOCHS * producer.num_batches_per_epoch,

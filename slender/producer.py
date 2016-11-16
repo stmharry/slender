@@ -3,7 +3,6 @@ from __future__ import print_function
 import cStringIO
 import numpy as np
 import os
-import PIL.Image
 import re
 import requests
 import sys
@@ -17,8 +16,9 @@ _ = scope_join_fn('producer')
 
 class BaseProducer(object):
     _CLASSNAME_NAME = 'class_names.txt'
-    _BUFFER_CAPACITY = 128
+    _BUFFER_CAPACITY = 256
 
+    '''
     _URL_REGEX = re.compile(r'http://|https://|ftp://|file://|file:\\')
     _SESSION = requests.Session()
 
@@ -33,23 +33,34 @@ class BaseProducer(object):
 
             s = fp.read()
             fp.close()
-            return np.array(s)
+            return s
 
         content = tf.py_func(_read, [file_name], tf.string)
         return content
+    '''
 
     @staticmethod
-    def get_queue_enqueue(values, dtypes, shapes):
+    def queue_join(values_list, dtypes=None, shapes=None, enqueue_many=False, name='queue_join'):
+        dtypes = dtypes or [value.dtype for value in values_list[0]]
+        shapes = shapes or [value.get_shape()[enqueue_many:] for value in values_list[0]]
+
         queue = tf.FIFOQueue(
             capacity=BaseProducer._BUFFER_CAPACITY,
             dtypes=dtypes,
             shapes=shapes,
+            name=name,
         )
-        enqueue = queue.enqueue_many(values)
-        queue_runner = tf.train.QueueRunner(queue, [enqueue])
+
+        if enqueue_many:
+            enqueue_fn = queue.enqueue_many
+        else:
+            enqueue_fn = queue.enqueue
+
+        enqueue_list = [enqueue_fn(values) for values in values_list]
+        queue_runner = tf.train.QueueRunner(queue, enqueue_list)
         tf.train.add_queue_runner(queue_runner)
 
-        return (queue, enqueue)
+        return queue
 
     def __init__(self,
                  working_dir,
@@ -74,17 +85,30 @@ class BaseProducer(object):
 
 
 class LocalFileProducer(BaseProducer):
-    @staticmethod
-    def hash_subsample_fn(mod, divisible):
-        def hash_subsample(string):
-            return bool(hash(string) % mod) != divisible
-        return hash_subsample
+    class SubsampleFunction(object):
+        @staticmethod
+        def NO_SUBSAMPLE():
+            def subsample(string):
+                return True
+            return subsample
+
+        @staticmethod
+        def HASH(mod, divisible):
+            def subsample(string):
+                return bool(hash(string) % mod) != divisible
+            return subsample
+
+    class MixScheme:
+        NONE = 0
+        UNIFORM = 1
 
     def __init__(self,
                  working_dir,
                  image_dir=None,
                  batch_size=64,
-                 subsample_fn=lambda v: True):
+                 num_parallels=8,
+                 subsample_fn=SubsampleFunction.NO_SUBSAMPLE(),
+                 mix_scheme=MixScheme.NONE):
 
         super(LocalFileProducer, self).__init__(
             working_dir=working_dir,
@@ -102,10 +126,17 @@ class LocalFileProducer(BaseProducer):
         ]
         self.num_files = sum(map(len, self.filenames_per_class))
         self.num_batches_per_epoch = self.num_files // self.batch_size
+        self.num_parallels = num_parallels
+        self.subsample_fn = subsample_fn
+        self.mix_scheme = mix_scheme
 
-    # TODO: rework with tf.decode
-    '''
     def check(self):
+        self.file_name = tf.placeholder(shape=(), dtype=tf.string)
+        self.content = BaseProducer.read(self.file_name)
+        self.image = tf.image.decode_jpeg(self.content)
+
+        sess = tf.Session()
+
         for (num_class, (class_name, file_names)) in enumerate(zip(self.class_names, self.filenames_per_class)):
             file_names_ = []
             for (num_file, file_name) in enumerate(file_names):
@@ -120,7 +151,7 @@ class LocalFileProducer(BaseProducer):
                 sys.stdout.flush()
 
                 try:
-                    image = imread_local(file_name)
+                    image = sess.run(self.image, feed_dict={self.file_name: file_name})
                     assert image.ndim == 3 and image.shape[2] == 3
                 except Exception:
                     print('Exception raised on {}'.format(file_name), end='\033[K\n')
@@ -131,39 +162,40 @@ class LocalFileProducer(BaseProducer):
             print('')
 
             self.filenames_per_class[num_class] = file_names_
-    '''
 
     def blob(self):
         with tf.variable_scope(_('blob')):
-            # TODO: mix scheme can be altered
-            if self.is_training:
-                filename_per_class = [
-                    tf.train.string_input_producer(file_names).dequeue()
-                    for file_names in self.filenames_per_class
-                ]
-
-                labels = tf.random_shuffle(tf.to_int64(tf.range(self.num_classes)))
-                file_names = tf.gather(tf.pack(filename_per_class), labels)
-            else:
+            if self.mix_scheme == LocalFileProducer.MixScheme.NONE:
                 (file_names, labels) = zip(*[
                     (file_name, label)
                     for (label, file_names) in enumerate(self.filenames_per_class)
                     for file_name in file_names
                 ])
+                labels = tf.convert_to_tensor(labels, dtype=tf.int64)
+                file_names = tf.convert_to_tensor(file_names, dtype=tf.string)
 
-            (filename_label_queue, _) = BaseProducer.get_queue_enqueue(
-                [file_names, labels],
-                dtypes=[tf.string, tf.int64],
-                shapes=[(), ()],
-            )
+            elif self.mix_scheme == LocalFileProducer.MixScheme.UNIFORM:
+                file_names = [
+                    tf.train.string_input_producer(file_names, name=class_name).dequeue()
+                    for (class_name, file_names) in zip(self.class_names, self.filenames_per_class)
+                ]
+                labels = tf.random_shuffle(tf.to_int64(tf.range(self.num_classes)))
+                file_names = tf.gather(tf.pack(file_names), labels)
 
-            (self.file_name, self.label) = filename_label_queue.dequeue_many(self.batch_size)
-            content_default = tf.map_fn(
-                BaseProducer.read,
-                self.file_name,
-                parallel_iterations=self.batch_size,
+            filename_label_queue = BaseProducer.queue_join(
+                [(file_names, labels)],
+                enqueue_many=True,
             )
-            self.content = tf.placeholder_with_default(content_default, shape=(None,))
+            filename_labels = [
+                filename_label_queue.dequeue()
+                for num_parallel in xrange(self.num_parallels)
+            ]
+            content_labels = [
+                (tf.read_file(filename_label[0]), filename_label[1])
+                for filename_label in filename_labels
+            ]
+            content_label_queue = BaseProducer.queue_join(content_labels)
+            (self.content, self.label) = content_label_queue.dequeue_many(self.batch_size)
 
         return Blob(content=self.content, label=self.label)
 
@@ -180,16 +212,6 @@ class PlaceholderProducer(BaseProducer):
 
     def blob(self):
         with tf.variable_scope(_('blob')):
-            '''
-            self.file_name = tf.placeholder(tf.string, shape=(None,))
-
-            content_default = tf.map_fn(
-                read,
-                self.file_name,
-                parallel_iterations=self.batch_size,
-            )
-            self.content = tf.placeholder_with_default(content_default, shape=(None,))
-            '''
             self.content = tf.placeholder(tf.string, shape=(None,))
 
             label_default = -1 * tf.ones_like(self.content, dtype=tf.int64)

@@ -1,6 +1,8 @@
+import base64
 import collections
 import flask
 import numpy as np
+import time
 
 from slender.util import latest_working_dir
 from online import Task, Factory
@@ -17,10 +19,13 @@ app.config.update(
 food_factory = Factory(working_dir=latest_working_dir('/mnt/data/food-save'))
 
 
-def eval(task):
+def manufacture(task, factory):
     results = []
 
-    task.eval(factory=food_factory)
+    task.put_timestamp = time.time()
+    task.eval(factory=factory)
+    task.done_timestamp = time.time()
+
     for prediction in task.outputs:
         indices = np.argsort(prediction)[:-(TOP_K + 1):-1]
         classname_probs = collections.OrderedDict([
@@ -43,8 +48,10 @@ def eval(task):
 
 @app.route('/classify/food_type', methods=['POST'])
 def classify_food():
-    files = sorted(flask.request.files.items(), key=lambda (key, value): int(key))
-    contents = [file[1].read() for file in files]
+    jsons = flask.request.get_json()
+    contents = [base64.standard_b64decode(json['photoContent']) for json in jsons]
     task = Task(inputs=contents)
     task.send_timestamp = float(flask.request.headers['timestamp'])
-    return flask.json.jsonify(eval(task))
+
+    results = manufacture(task, food_factory)
+    return flask.json.jsonify(results)
