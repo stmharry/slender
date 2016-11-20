@@ -29,3 +29,18 @@ def scope_join_fn(scope):
 def LOG(value, name=None, fn=tf.identity):
     value = tf.Print(value, [fn(value)], '{}: '.format(name or value.__name__))
     return value
+
+
+class Timer(object):
+    def __init__(self, message=''):
+        self.message = message
+
+    def __enter__(self):
+        self.start = time.time()
+        print('{} --->'.format(self.message))
+        return self
+
+    def __exit__(self, *args):
+        self.end = time.time()
+        self.interval = self.end - self.start
+        print('---> {}: interval={:.4f} s'.format(self.message, self.interval))

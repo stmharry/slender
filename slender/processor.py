@@ -226,21 +226,21 @@ class BaseProcessor(object):
 
     def preprocess(self, blob):
         with tf.variable_scope(_('preprocess')):
-            image = tf.map_fn(
+            images = tf.map_fn(
                 self.preprocess_single,
-                blob.content,
+                blob.contents,
                 dtype=tf.float32,
                 parallel_iterations=self.batch_size,
             )
 
-            shape = image.get_shape().as_list()
+            shape = images.get_shape().as_list()
             new_shape = [-1] + shape[2:]
-            self.image = tf.reshape(image, new_shape)
+            self.images = tf.reshape(images, new_shape)
 
             self.num_repeats = shape[1]
-            self.label = tf.reshape(tf.tile(tf.expand_dims(blob.label, 1), (1, self.num_repeats)), (-1,))
+            self.labels = tf.reshape(tf.tile(tf.expand_dims(blob.labels, 1), (1, self.num_repeats)), (-1,))
 
-        return Blob(image=self.image, label=self.label)
+        return Blob(images=self.images, labels=self.labels)
 
     def postprocess(self, blob):
         with tf.variable_scope(_('postprocess')):
@@ -308,6 +308,24 @@ class TestProcessor(BaseProcessor):
         images = self.mean_subtraction(images)
         images = self.resize(images)
         images = self.central_crop_or_pad(images)
+        image = tf.pack(images)
+        return image
+
+
+class SimpleProcessor(BaseProcessor):
+    def __init__(self,
+                 net_dim,
+                 batch_size=64):
+
+        super(SimpleProcessor, self).__init__(
+            net_dim=net_dim,
+            batch_size=batch_size,
+        )
+
+    def preprocess_single(self, content):
+        images = [BaseProcessor._decode(content)] * self.num_duplicates
+        images = self.mean_subtraction(images)
+        images = self.set_shape(images)
         image = tf.pack(images)
         return image
 

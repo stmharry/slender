@@ -18,27 +18,6 @@ class BaseProducer(object):
     _CLASSNAME_NAME = 'class_names.txt'
     _BUFFER_CAPACITY = 256
 
-    '''
-    _URL_REGEX = re.compile(r'http://|https://|ftp://|file://|file:\\')
-    _SESSION = requests.Session()
-
-    @staticmethod
-    def read(file_name):
-        def _read(file_name):
-            if BaseProducer._URL_REGEX.match(file_name) is not None:
-                r = BaseProducer._SESSION.get(file_name)
-                fp = cStringIO.StringIO(r.content)
-            else:
-                fp = open(file_name, 'rb')
-
-            s = fp.read()
-            fp.close()
-            return s
-
-        content = tf.py_func(_read, [file_name], tf.string)
-        return content
-    '''
-
     @staticmethod
     def queue_join(values_list, dtypes=None, shapes=None, enqueue_many=False, name='queue_join'):
         dtypes = dtypes or [value.dtype for value in values_list[0]]
@@ -165,6 +144,7 @@ class LocalFileProducer(BaseProducer):
 
     def blob(self):
         with tf.variable_scope(_('blob')):
+            # TODO: better mix_scheme
             if self.mix_scheme == LocalFileProducer.MixScheme.NONE:
                 (file_names, labels) = zip(*[
                     (file_name, label)
@@ -195,9 +175,9 @@ class LocalFileProducer(BaseProducer):
                 for filename_label in filename_labels
             ]
             content_label_queue = BaseProducer.queue_join(content_labels)
-            (self.content, self.label) = content_label_queue.dequeue_many(self.batch_size)
+            (self.contents, self.labels) = content_label_queue.dequeue_many(self.batch_size)
 
-        return Blob(content=self.content, label=self.label)
+        return Blob(contents=self.contents, labels=self.labels)
 
 
 class PlaceholderProducer(BaseProducer):
@@ -212,9 +192,9 @@ class PlaceholderProducer(BaseProducer):
 
     def blob(self):
         with tf.variable_scope(_('blob')):
-            self.content = tf.placeholder(tf.string, shape=(None,))
+            self.contents = tf.placeholder(tf.string, shape=(None,))
 
-            label_default = -1 * tf.ones_like(self.content, dtype=tf.int64)
-            self.label = tf.placeholder_with_default(label_default, shape=(None,))
+            label_default = -1 * tf.ones_like(self.contents, dtype=tf.int64)
+            self.labels = tf.placeholder_with_default(label_default, shape=(None,))
 
-        return Blob(content=self.content, label=self.label)
+        return Blob(contents=self.contents, labels=self.labels)

@@ -67,8 +67,8 @@ class BaseNet(object):
         pass
 
     def forward(self, blob):
-        self.images = blob.image
-        self.labels = blob.label
+        self.images = blob.images
+        self.labels = blob.labels
 
         with slim.arg_scope(self.arg_scope):
             (net, self.end_points) = _NET(
@@ -120,6 +120,10 @@ class BaseNet(object):
                 })
 
         return blob
+
+    @abc.abstractmethod
+    def eval(self):
+        pass
 
 
 class TrainNet(BaseNet):
@@ -194,7 +198,7 @@ class TrainNet(BaseNet):
         self.init_feed_dict = assign_feed_dict
         self.saver = tf.train.Saver(self.vars_to_save)
 
-    def train(self,
+    def eval(self,
               number_of_steps,
               log_every_n_steps=1,
               save_summaries_secs=10,
@@ -238,7 +242,7 @@ class TestNet(BaseNet):
         self.summary_ops = map(tf.scalar_summary, self.metric_names, self.metric_values)
         self.summary_feats = tf.histogram_summary('feats', self.feats)
 
-    def test(self,
+    def eval(self,
              num_steps,
              eval_interval_secs=300,
              timeout=600):
@@ -255,7 +259,7 @@ class TestNet(BaseNet):
         )
 
 
-class OnlineNet(BaseNet):
+class SimpleNet(BaseNet):
     def __init__(self,
                  working_dir,
                  num_classes,
@@ -263,7 +267,7 @@ class OnlineNet(BaseNet):
                  log_device_placement=False,
                  verbosity=tf.logging.INFO):
 
-        super(OnlineNet, self).__init__(
+        super(SimpleNet, self).__init__(
             working_dir=working_dir,
             num_classes=num_classes,
             is_training=False,
@@ -271,8 +275,6 @@ class OnlineNet(BaseNet):
             log_device_placement=log_device_placement,
             verbosity=verbosity,
         )
-
-        self.sess = None
 
     def _forward(self):
         self.vars_to_restore = BaseNet.get_scope_set()
@@ -289,6 +291,6 @@ class OnlineNet(BaseNet):
         )
         self.sess.run(self.init_op, feed_dict=self.init_feed_dict)
 
-    def online(self, blob, feed_dict=None):
+    def eval(self, blob, feed_dict=None):
         blob_val = blob.eval(self.sess, feed_dict=feed_dict)
         return blob_val

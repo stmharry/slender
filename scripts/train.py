@@ -46,7 +46,6 @@ class Factory(object):
             processor.preprocess,
             net.forward,
         ])
-
         self.__dict__.update(locals())
 
     def run(self):
