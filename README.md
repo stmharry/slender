@@ -70,3 +70,8 @@ producer = Producer(
 
 producer.check()
 ```
+
+## Serving models online
+```
+Please refer to scripts/classify_service.py for now since I am too lazy ...
+```
