@@ -4,8 +4,8 @@ import flask
 import time
 
 from slender.producer import PlaceholderProducer as Producer
-from slender.processor import SimpleProcessor as Processor
-# from slender.processor import TestProcessor as Processor
+# from slender.processor import SimpleProcessor as Processor
+from slender.processor import TestProcessor as Processor
 from slender.net import SimpleNet as Net
 from slender.model import BaseTask, BatchFactory
 from slender.util import latest_working_dir, Timer

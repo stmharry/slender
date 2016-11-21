@@ -14,21 +14,15 @@ class BaseTask(object):
         self.size = 0
         self._event = threading.Event()
         self._offset = 0
-        # print('{}.init: size={}'.format(self, len(inputs)))
-
-    def __str__(self):
-        return 'task#{}'.format(self.task_id)
 
     def request_inputs(self, size):
         self.size = min(size, len(self.inputs) - self._offset)
         inputs = self.inputs[self._offset:self._offset + self.size]
         self._offset += self.size
-        # print('{}.request_inputs: size={}'.format(self, self.size))
         return inputs
 
     def is_done(self):
         flag = (self._offset == len(self.inputs))
-        # print('{}.is_done: offset={}'.format(self, self._offset))
         if flag:
             self._event.set()
         return flag
@@ -66,7 +60,6 @@ class BatchFactory(threading.Thread):
 
             # finish tasks at hand first ...
             for task in self.tasks:
-                # print('factory.run.inputs: task={}'.format(task))
                 inputs.extend(task.request_inputs(size=self.batch_size - len(inputs)))
 
             # ... before retrieving new tasks
@@ -77,14 +70,13 @@ class BatchFactory(threading.Thread):
                     break
                 else:
                     self.tasks.append(task)
-                    # print('factory.run.inputs: task={}'.format(task))
                     inputs.extend(task.request_inputs(size=self.batch_size - len(inputs)))
 
             outputs = self.run_one(inputs)
 
+            # do not remove in-place, dangerous!
             tasks_ = []
             for task in self.tasks:
-                # print('factory.run.outputs: task={}'.format(task))
                 task.outputs.extend(outputs[:task.size])
                 outputs = outputs[task.size:]
 
