@@ -1,6 +1,5 @@
 import abc
 import threading
-import time
 import Queue
 
 
@@ -14,6 +13,9 @@ class BaseTask(object):
         self.size = 0
         self._event = threading.Event()
         self._offset = 0
+
+    def __str__(self):
+        return 'task#{}'.format(self.task_id)
 
     def request_inputs(self, size):
         self.size = min(size, len(self.inputs) - self._offset)
@@ -30,7 +32,6 @@ class BaseTask(object):
     def eval(self, factory):
         factory.queue.put(self)
         self._event.wait()
-        return self.outputs
 
 
 class BatchFactory(threading.Thread):

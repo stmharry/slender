@@ -1,10 +1,10 @@
 import base64
 import os
 import requests
-import time
 
 IMAGE_DIR = '/tmp/img'
-API_URL = 'http://dev.2bite.com:8080/classify/food_type'
+# API_URL = 'http://dev.2bite.com:8080/classify/6_categories'
+API_URL = 'http://classify.2bite.com:8080/classify/6_categories'
 
 URLS = [
     'http://s3-us-west-1.amazonaws.com/pic.2bite.com/event/5642f19c518f6e735e8b49b7/classify/c_a3d6336e9fdd4f8ead5ac74518877f72.jpg',
@@ -59,6 +59,7 @@ URLS = [
     'http://s3-us-west-1.amazonaws.com/pic.2bite.com/event/5642f19c518f6e735e8b49f3/classify/c_c74e65c315434c0198d01ae492a5c2c3.jpg',
 ]
 
+
 class Image(object):
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
@@ -85,10 +86,12 @@ def get_images():
                 content=r.content,
             ))
 
-        class_names = predict(images)
+        json = images_to_json(images)
+        response = requests.post(API_URL, json=json)
+        class_names = json_to_classnames(response.json())
 
         for (image, class_name) in zip(images, class_names):
-            iamge.class_name = class_name
+            image.class_name = class_name
             path = os.path.join(IMAGE_DIR, '{}:{}'.format(class_name, image.file_name))
             with open(path, 'w') as f:
                 f.write(image.content)

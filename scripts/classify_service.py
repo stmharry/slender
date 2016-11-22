@@ -1,20 +1,19 @@
 import base64
 import collections
 import flask
-import time
 
 from slender.producer import PlaceholderProducer as Producer
-# from slender.processor import SimpleProcessor as Processor
 from slender.processor import TestProcessor as Processor
 from slender.net import SimpleNet as Net
 from slender.model import BaseTask, BatchFactory
 from slender.util import latest_working_dir, Timer
 
-FOOD_WORKING_DIR_ROOT = '/mnt/data/food-save'
+WORKING_DIR_ROOT = '/mnt/data/content-save'
 QUEUE_SIZE = 1024
 BATCH_SIZE = 64
 NET_DIM = 256
 GPU_FRAC = 1.0
+
 
 def TIMEOUT_FN(size):
     if size == 0:
@@ -34,7 +33,7 @@ app.config.update(
 
 class Task(BaseTask):
     def eval(self, factory):
-        outputs = super(Task, self).eval(factory)
+        super(Task, self).eval(factory)
 
         results = []
         for (input_, output) in zip(self.inputs, self.outputs):
@@ -102,13 +101,14 @@ class Factory(BatchFactory):
         return outputs
 
 
-food_factory = Factory(working_dir=latest_working_dir('/mnt/data/food-save'))
-food_factory.start()
+factory = Factory(working_dir=latest_working_dir(WORKING_DIR_ROOT))
+factory.start()
 
 
-@app.route('/classify/food_type', methods=['POST'])
-def classify_food():
+@app.route('/classify/6_categories', methods=['POST'])
+def classify():
     json = flask.request.get_json()
+    print(json)
     task_id = flask.request.headers.get('task-id', None)
     task_id = task_id and int(task_id)
     for item in json:
@@ -116,5 +116,5 @@ def classify_food():
 
     task = Task(json, task_id=task_id)
     with Timer(message='{}.eval'.format(task)):
-        results = task.eval(factory=food_factory)
+        results = task.eval(factory=factory)
     return flask.json.jsonify(results)
