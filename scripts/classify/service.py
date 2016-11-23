@@ -8,7 +8,8 @@ from slender.net import SimpleNet as Net
 from slender.model import BaseTask, BatchFactory
 from slender.util import latest_working_dir, Timer
 
-WORKING_DIR_ROOT = '/mnt/data/content-save'
+WORKING_DIR_ROOT = '/mnt/data/food-save'
+ROUTE = '/classify/food_types'
 QUEUE_SIZE = 1024
 BATCH_SIZE = 64
 NET_DIM = 256
@@ -105,7 +106,7 @@ factory = Factory(working_dir=latest_working_dir(WORKING_DIR_ROOT))
 factory.start()
 
 
-@app.route('/classify/6_categories', methods=['POST'])
+@app.route(ROUTE, methods=['POST'])
 def classify():
     json = flask.request.get_json()
     print(json)

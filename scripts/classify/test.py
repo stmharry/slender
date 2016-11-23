@@ -1,12 +1,11 @@
-import base64
-import os
 import requests
 
-IMAGE_DIR = '/tmp/img'
-# API_URL = 'http://dev.2bite.com:8080/classify/6_categories'
-API_URL = 'http://classify.2bite.com:8080/classify/6_categories'
+from images import Image
 
-URLS = [
+API_URL = 'http://dev.2bite.com:8080/classify/food_types'
+# API_URL = 'http://classify.2bite.com:8080/classify/6_categories'
+
+URIS = [
     'http://s3-us-west-1.amazonaws.com/pic.2bite.com/event/5642f19c518f6e735e8b49b7/classify/c_a3d6336e9fdd4f8ead5ac74518877f72.jpg',
     'http://s3-us-west-1.amazonaws.com/pic.2bite.com/event/5642f19c518f6e735e8b49df/classify/c_0684bfe01d1a4ff3a6e9ad7387484ec4.jpg',
     'http://s3-us-west-1.amazonaws.com/pic.2bite.com/event/5642f19c518f6e735e8b49df/classify/c_20d3016fd00a4b2ebe7152b51e820f00.jpg',
@@ -59,81 +58,9 @@ URLS = [
     'http://s3-us-west-1.amazonaws.com/pic.2bite.com/event/5642f19c518f6e735e8b49f3/classify/c_c74e65c315434c0198d01ae492a5c2c3.jpg',
 ]
 
+images = [Image(uri=uri) for uri in URIS]
+json = [image.json() for image in images]
 
-class Image(object):
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
-
-
-def get_images():
-    is_cached = False
-    if os.path.isdir(IMAGE_DIR):
-        if os.listdir(IMAGE_DIR):
-            is_cached = True
-
-    if not is_cached:
-        sess = requests.Session()
-        os.makedirs(IMAGE_DIR)
-
-        images = []
-        for url in URLS:
-            file_name = os.path.basename(url)
-            print('Retriving {}'.format(file_name))
-            r = sess.get(url)
-
-            images.append(Image(
-                file_name=file_name,
-                content=r.content,
-            ))
-
-        json = images_to_json(images)
-        response = requests.post(API_URL, json=json)
-        class_names = json_to_classnames(response.json())
-
-        for (image, class_name) in zip(images, class_names):
-            image.class_name = class_name
-            path = os.path.join(IMAGE_DIR, '{}:{}'.format(class_name, image.file_name))
-            with open(path, 'w') as f:
-                f.write(image.content)
-
-    else:
-        images = []
-        file_names = os.listdir(IMAGE_DIR)
-        for file_name in file_names:
-            class_name = file_name.split(':')[0]
-            path = os.path.join(IMAGE_DIR, file_name)
-            with open(path, 'r') as f:
-                content = f.read()
-
-            images.append(Image(
-                file_name=file_name,
-                class_name=class_name,
-                content=content,
-            ))
-
-    return images
-
-
-def images_to_json(images):
-    json = [{
-        'photoName': image.file_name,
-        'photoContent': base64.standard_b64encode(image.content),
-    } for image in images]
-    return json
-
-
-def json_to_classnames(json):
-    class_names = []
-    for result in json:
-        class_name = max(result['classes'].items(), key=lambda item: float(item[1]))[0]
-        class_names.append(class_name)
-
-    return class_names
-
-
-if __name__ == '__main__':
-    images = get_images()
-    json = images_to_json(images)
-    response = requests.post(API_URL, json=json)
-    class_names = json_to_classnames(response.json())
-    print(class_names)
+response = requests.post(API_URL, json=json)
+for (image, dict_) in zip(images, response.json()):
+    image.classname_from_dict(dict_)
