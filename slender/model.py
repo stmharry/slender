@@ -39,10 +39,29 @@ class BatchFactory(threading.Thread):
 
     SERVE_FOREVER = True
 
+    class TimeoutFunction(object):
+        @staticmethod
+        def CONSTANT(offset):
+            def timeout_fn(size, batch_size):
+                if size == 0:
+                    return None
+                else:
+                    return offset
+            return timeout_fn
+
+        @staticmethod
+        def QUARDRATIC(offset, delta):
+            def timeout_fn(size, batch_size):
+                if size == 0:
+                    return None
+                else:
+                    return offset + delta * (1 - ((batch_size - 2 * float(size)) / batch_size) ** 2)
+            return timeout_fn
+
     def __init__(self,
                  batch_size,
                  queue_size,
-                 timeout_fn):
+                 timeout_fn=TimeoutFunction.CONSTANT(offset=0)):
 
         super(BatchFactory, self).__init__()
 
@@ -66,7 +85,7 @@ class BatchFactory(threading.Thread):
             # ... before retrieving new tasks
             while len(inputs) < self.batch_size:
                 try:
-                    task = self.queue.get(timeout=self.timeout_fn(len(inputs)))
+                    task = self.queue.get(timeout=self.timeout_fn(len(inputs), self.batch_size))
                 except Queue.Empty:
                     break
                 else:

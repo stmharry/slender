@@ -8,23 +8,6 @@ from slender.net import SimpleNet as Net
 from slender.model import BaseTask, BatchFactory
 from slender.util import latest_working_dir, Timer
 
-WORKING_DIR_ROOT = '/mnt/data/food-save'
-ROUTE = '/classify/food_types'
-QUEUE_SIZE = 1024
-BATCH_SIZE = 64
-NET_DIM = 256
-GPU_FRAC = 1.0
-
-
-def TIMEOUT_FN(size):
-    if size == 0:
-        return None
-    else:
-        return 0.02 + 0.01 * (1 - ((BATCH_SIZE - 2 * float(size)) / BATCH_SIZE) ** 2)
-
-TOP_K = 6
-FORMAT_STR = '{:.4f}'
-
 app = flask.Flask(__name__)
 app.config.update(
     JSON_SORT_KEYS=False,
@@ -38,9 +21,9 @@ class Task(BaseTask):
 
         results = []
         for (input_, output) in zip(self.inputs, self.outputs):
-            indices = sorted(range(len(output)), key=output.__getitem__)[:(-TOP_K + 1):-1]
+            indices = sorted(range(len(output)), key=output.__getitem__)[::-1][:6]
             classname_probs = collections.OrderedDict([
-                (factory.producer.class_names[index], FORMAT_STR.format(output[index]))
+                (factory.producer.class_names[index], '{:.4f}'.format(output[index]))
                 for index in indices
             ])
             results.append({
@@ -55,11 +38,11 @@ class Task(BaseTask):
 class Factory(BatchFactory):
     def __init__(self,
                  working_dir,
-                 queue_size=QUEUE_SIZE,
-                 batch_size=BATCH_SIZE,
-                 net_dim=NET_DIM,
-                 gpu_frac=GPU_FRAC,
-                 timeout_fn=TIMEOUT_FN):
+                 queue_size,
+                 batch_size,
+                 net_dim,
+                 gpu_frac,
+                 timeout_fn):
 
         super(Factory, self).__init__(
             batch_size=batch_size,
@@ -102,14 +85,20 @@ class Factory(BatchFactory):
         return outputs
 
 
-factory = Factory(working_dir=latest_working_dir(WORKING_DIR_ROOT))
+factory = Factory(
+    working_dir=latest_working_dir('/mnt/data/food-save'),
+    queue_size=1024,
+    batch_size=16,
+    net_dim=256,
+    gpu_frac=1.0,
+    timeout_fn=Factory.TimeoutFunction.QUARDRATIC(offset=0.02, delta=0.01),
+)
 factory.start()
 
 
-@app.route(ROUTE, methods=['POST'])
+@app.route('/classify/food_types', methods=['POST'])
 def classify():
     json = flask.request.get_json()
-    print(json)
     task_id = flask.request.headers.get('task-id', None)
     task_id = task_id and int(task_id)
     for item in json:
