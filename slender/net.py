@@ -13,7 +13,6 @@ _ = scope_join_fn('net')
 
 _NET = resnet_v1.resnet_v1_50
 _SIZE = resnet_v1.resnet_v1.default_image_size
-_FEAT_SIZE = 256
 _ARG_SCOPE_FN = resnet_v1.resnet_arg_scope
 
 _NET_SCOPE = _NET.__name__
@@ -30,7 +29,6 @@ class BaseNet(object):
         'accuracy',
     ]
     _OUTPUT_FLATTENED_ATTRS = [
-        'binary_feats',
         'logits',
         'predictions',
     ]
@@ -78,17 +76,8 @@ class BaseNet(object):
             )
 
             with tf.variable_scope(_('forward')):
-                self.feats = slim.conv2d(
-                    net,
-                    _FEAT_SIZE,
-                    (1, 1),
-                    activation_fn=tf.tanh,
-                    normalizer_fn=None,
-                    scope='feats',
-                )
-                self.binary_feats = tf.to_float(tf.greater(self.feats, 0))
                 self.logits = slim.conv2d(
-                    self.feats,
+                    net,
                     self.num_classes,
                     (1, 1),
                     activation_fn=None,
@@ -184,7 +173,6 @@ class TrainNet(BaseNet):
 
         self.metric_names = map('train/'.__add__, self.metric_names)
         self.summary_ops = map(tf.scalar_summary, self.metric_names, self.metric_values)
-        self.summary_feats = tf.histogram_summary('feats', self.feats)
 
         self.optimizer = tf.train.AdamOptimizer(self.learning_rate, epsilon=1.0)
         self.train_op = slim.learning.create_train_op(
@@ -199,10 +187,10 @@ class TrainNet(BaseNet):
         self.saver = tf.train.Saver(self.vars_to_save)
 
     def eval(self,
-              number_of_steps,
-              log_every_n_steps=1,
-              save_summaries_secs=10,
-              save_interval_secs=600):
+             number_of_steps,
+             log_every_n_steps=1,
+             save_summaries_secs=10,
+             save_interval_secs=600):
 
         slim.learning.train(
             self.train_op,
@@ -240,7 +228,6 @@ class TestNet(BaseNet):
         self.metric_value_updates = map(slim.metrics.streaming_mean, self.metric_values)
         (self.metric_values, self.metric_updates) = slim.metrics.aggregate_metrics(*self.metric_value_updates)
         self.summary_ops = map(tf.scalar_summary, self.metric_names, self.metric_values)
-        self.summary_feats = tf.histogram_summary('feats', self.feats)
 
     def eval(self,
              num_steps,
@@ -278,8 +265,6 @@ class SimpleNet(BaseNet):
 
     def _forward(self):
         self.vars_to_restore = BaseNet.get_scope_set()
-
-        self.summary_feats = tf.histogram_summary('feats', self.feats)
 
         (assign_op, assign_feed_dict) = slim.assign_from_checkpoint(tf.train.latest_checkpoint(self.working_dir), list(self.vars_to_restore))
         self.init_op = assign_op

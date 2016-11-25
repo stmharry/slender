@@ -90,7 +90,7 @@ factory = Factory(
     queue_size=1024,
     batch_size=16,
     net_dim=256,
-    gpu_frac=1.0,
+    gpu_frac=0.35,
     timeout_fn=Factory.TimeoutFunction.QUARDRATIC(offset=0.02, delta=0.01),
 )
 factory.start()
@@ -99,11 +99,11 @@ factory.start()
 @app.route('/classify/food_types', methods=['POST'])
 def classify():
     json = flask.request.get_json()
-    task_id = flask.request.headers.get('task-id', None)
-    task_id = task_id and int(task_id)
     for item in json:
         item['photoRawContent'] = base64.standard_b64decode(item['photoContent'])
 
+    task_id = flask.request.headers.get('task-id', None)
+    task_id = task_id and int(task_id)
     task = Task(json, task_id=task_id)
     with Timer(message='{}.eval'.format(task)):
         results = task.eval(factory=factory)

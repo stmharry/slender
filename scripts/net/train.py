@@ -9,7 +9,7 @@ WORKING_DIR = new_working_dir(WORKING_DIR_ROOT)
 BATCH_SIZE = 64
 SUBSAMPLE_FN = Producer.SubsampleFunction.HASH(mod=64, divisible=False)
 MIX_SCHEME = Producer.MixScheme.UNIFORM
-GPU_FRAC = 0.6
+GPU_FRAC = 0.5
 LEARNING_RATE = 0.1
 NUM_TRAIN_EPOCHS = 15
 NUM_DECAY_EPOCHS = 1.5
@@ -48,8 +48,8 @@ class Factory(object):
         ])
         self.__dict__.update(locals())
 
-    def eval(self):
-        self.net.train(self.num_train_epochs * self.producer.num_batches_per_epoch)
+    def run(self):
+        self.net.eval(self.num_train_epochs * self.producer.num_batches_per_epoch)
 
 
 if __name__ == '__main__':

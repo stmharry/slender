@@ -59,8 +59,10 @@ URIS = [
 ]
 
 images = [Image(uri=uri) for uri in URIS]
-json = [image.json() for image in images]
+images = sorted(images, key=lambda image: image.file_name)
 
+json = [image.json() for image in images]
 response = requests.post(API_URL, json=json)
 for (image, dict_) in zip(images, response.json()):
     image.classname_from_dict(dict_)
+    print((image.file_name, image.class_name))
