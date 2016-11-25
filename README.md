@@ -29,7 +29,7 @@ net = Net(
 )
 blob = producer.blob().func(processor.preprocess).func(net.forward)
 
-net.train(NUM_TRAIN_EPOCHS * producer.num_batches_per_epoch)
+net.eval(NUM_TRAIN_EPOCHS * producer.num_batches_per_epoch)
 ```
 
 ## Easy evaluation
@@ -56,7 +56,7 @@ net = Net(
 )
 blob = producer.blob().func(processor.preprocess).func(net.forward)
 
-net.test(producer.num_batches_per_epoch)
+net.eval(producer.num_batches_per_epoch)
 ```
 
 ## Image integrity checking
