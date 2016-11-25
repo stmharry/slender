@@ -72,10 +72,9 @@ class Factory(BatchFactory):
         self.__dict__.update(locals())
 
     def run_one(self, inputs):
-        print('factory.blob.eval: batch_size={}'.format(len(inputs)))
         contents = [input_['photoRawContent'] for input_ in inputs]
 
-        with Timer(message='factory.blob.eval'):
+        with Timer(message='factory.blob.eval(size={})'.format(len(inputs))):
             blob_val = self.blob.eval(
                 sess=self.net.sess,
                 feed_dict={self.producer.contents: contents},
@@ -105,6 +104,6 @@ def classify():
     task_id = flask.request.headers.get('task-id', None)
     task_id = task_id and int(task_id)
     task = Task(json, task_id=task_id)
-    with Timer(message='{}.eval'.format(task)):
+    with Timer(message='task({}).eval(size={})'.format(task.task_id, len(json))):
         results = task.eval(factory=factory)
     return flask.json.jsonify(results)

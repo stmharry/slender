@@ -2,8 +2,8 @@ import requests
 
 from images import Image
 
-API_URL = 'http://dev.2bite.com:8080/classify/food_types'
-# API_URL = 'http://classify.2bite.com:8080/classify/6_categories'
+# API_URL = 'http://dev.2bite.com:8080/classify/food_types'
+API_URL = 'http://classify.2bite.com:8080/classify/6_categories'
 
 URIS = [
     'http://s3-us-west-1.amazonaws.com/pic.2bite.com/event/5642f19c518f6e735e8b49b7/classify/c_a3d6336e9fdd4f8ead5ac74518877f72.jpg',

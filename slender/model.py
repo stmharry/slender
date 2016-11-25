@@ -14,9 +14,6 @@ class BaseTask(object):
         self._event = threading.Event()
         self._offset = 0
 
-    def __str__(self):
-        return 'task#{}'.format(self.task_id)
-
     def request_inputs(self, size):
         self.size = min(size, len(self.inputs) - self._offset)
         inputs = self.inputs[self._offset:self._offset + self.size]

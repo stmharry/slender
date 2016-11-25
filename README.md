@@ -73,5 +73,5 @@ producer.check()
 
 ## Serving models online
 ```
-Please refer to scripts/classify_service.py for now since I am too lazy ...
+Please refer to scripts/classify/service.py for now since I am too lazy ...
 ```
