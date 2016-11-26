@@ -1,11 +1,18 @@
+# -*- encoding: utf-8 -*-
+
+import base64
+import collections
+import os
+import re
 import requests
 
-from images import Image
+BAR_CHAR = '█'
+MAX_BAR_SIZE = 100
 
-# API_URL = 'http://dev.2bite.com:8080/classify/food_types'
-API_URL = 'http://classify.2bite.com:8080/classify/6_categories'
+API_URL = 'http://dev.2bite.com:8080/classify/food_types'
+# API_URL = 'http://classify.2bite.com:8080/classify/6_categories'
 
-URIS = [
+URIS = sorted([
     'http://s3-us-west-1.amazonaws.com/pic.2bite.com/event/5642f19c518f6e735e8b49b7/classify/c_a3d6336e9fdd4f8ead5ac74518877f72.jpg',
     'http://s3-us-west-1.amazonaws.com/pic.2bite.com/event/5642f19c518f6e735e8b49df/classify/c_0684bfe01d1a4ff3a6e9ad7387484ec4.jpg',
     'http://s3-us-west-1.amazonaws.com/pic.2bite.com/event/5642f19c518f6e735e8b49df/classify/c_20d3016fd00a4b2ebe7152b51e820f00.jpg',
@@ -56,13 +63,70 @@ URIS = [
     'http://s3-us-west-1.amazonaws.com/pic.2bite.com/event/5642f19c518f6e735e8b49f3/classify/c_ae1a482df31b43b2b45c5f0ccbfb55e3.jpg',
     'http://s3-us-west-1.amazonaws.com/pic.2bite.com/event/5642f19c518f6e735e8b49f3/classify/c_b8c1afb161ea465daf717f2f1f92c236.jpg',
     'http://s3-us-west-1.amazonaws.com/pic.2bite.com/event/5642f19c518f6e735e8b49f3/classify/c_c74e65c315434c0198d01ae492a5c2c3.jpg',
-]
+])
 
-images = [Image(uri=uri) for uri in URIS]
-images = sorted(images, key=lambda image: image.file_name)
 
+class Image(object):
+    URL_REGEX = re.compile(r'http://|https://|ftp://|file://|file:\\')
+    SESSION = requests.Session()
+    TMP_DIR = '/tmp/img'
+
+    @staticmethod
+    def from_local(path):
+        with open(path, 'r') as f:
+            content = f.read()
+        return content
+
+    @staticmethod
+    def from_online_and_cache(url, path):
+        content = Image.SESSION.get(url).content
+        with open(path, 'w') as f:
+            f.write(content)
+        return content
+
+    def __init__(self, uri):
+        if Image.URL_REGEX.match(uri) is None:
+            self.path = uri
+            self.name = os.path.basename(self.path)
+            self.content = Image.from_local(self.path)
+        else:
+            self.url = uri
+            self.name = os.path.basename(self.url)
+            self.path = os.path.join(Image.TMP_DIR, self.name)
+
+            if os.path.isfile(self.path):
+                self.content = Image.from_local(self.path)
+            else:
+                if not os.path.isdir(Image.TMP_DIR):
+                    os.makedirs(Image.TMP_DIR)
+                self.content = Image.from_online_and_cache(self.url, self.path)
+
+    def __repr__(self):
+        return '<Image {}>'.format(self.name)
+
+    def b64_content(self):
+        return base64.standard_b64encode(self.content)
+
+    def json(self):
+        return {
+            'photoName': self.name,
+            'photoContent': self.b64_content(),
+        }
+
+
+images = map(Image, URIS)
 json = [image.json() for image in images]
 response = requests.post(API_URL, json=json)
-for (image, dict_) in zip(images, response.json()):
-    image.classname_from_dict(dict_)
-    print((image.file_name, image.class_name))
+items = response.json(object_pairs_hook=collections.OrderedDict)
+
+for (image, item) in zip(images, items):
+    print(image.name)
+    for (class_name, prediction) in item['classes'].items():
+        prediction = float(prediction)
+        bar_size = int(MAX_BAR_SIZE * prediction)
+        print('{:>16} | {} {:.4f}'.format(
+            class_name,
+            BAR_CHAR * bar_size,
+            prediction,
+        ))
+    print('')

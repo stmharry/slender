@@ -3,7 +3,7 @@ import collections
 import flask
 
 from slender.producer import PlaceholderProducer as Producer
-from slender.processor import TestProcessor as Processor
+from slender.processor import TestProcessor as Processor, List
 from slender.net import SimpleNet as Net
 from slender.model import BaseTask, BatchFactory
 from slender.util import latest_working_dir, Timer
@@ -41,6 +41,7 @@ class Factory(BatchFactory):
                  queue_size,
                  batch_size,
                  net_dim,
+                 shorter_dim,
                  gpu_frac,
                  timeout_fn):
 
@@ -56,6 +57,7 @@ class Factory(BatchFactory):
         )
         processor = Processor(
             net_dim=net_dim,
+            shorter_dim=shorter_dim,
             batch_size=batch_size,
         )
         net = Net(
@@ -89,7 +91,8 @@ factory = Factory(
     queue_size=1024,
     batch_size=16,
     net_dim=256,
-    gpu_frac=0.35,
+    shorter_dim=List([256, 512]),
+    gpu_frac=0.3,
     timeout_fn=Factory.TimeoutFunction.QUARDRATIC(offset=0.02, delta=0.01),
 )
 factory.start()
