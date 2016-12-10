@@ -21,13 +21,20 @@ class Task(BaseTask):
 
         results = []
         for (input_, output) in zip(self.inputs, self.outputs):
+            if output is None:
+                status = 'error'
+                output = [1.0] + [0.0] * (factory.producer.num_classes - 1)
+            else:
+                status = 'ok'
+
             indices = sorted(range(len(output)), key=output.__getitem__)[::-1][:6]
             classname_probs = collections.OrderedDict([
                 (factory.producer.class_names[index], '{:.4f}'.format(output[index]))
                 for index in indices
             ])
+
             results.append({
-                'status': 'ok',
+                'status': status,
                 'photoName': input_['photoName'],
                 'classes': classname_probs,
             })
@@ -74,15 +81,19 @@ class Factory(BatchFactory):
         self.__dict__.update(locals())
 
     def run_one(self, inputs):
-        contents = [input_['photoRawContent'] for input_ in inputs]
+        indices = [index for index in xrange(len(inputs)) if inputs[index]['photoContentDecoded'] is not None]
+        contents = [inputs[index]['photoContentDecoded'] for index in indices]
 
-        with Timer(message='factory.blob.eval(size={})'.format(len(inputs))):
+        with Timer(message='factory.blob.eval(size={})'.format(len(contents))):
             blob_val = self.blob.eval(
                 sess=self.net.sess,
                 feed_dict={self.producer.contents: contents},
             )
 
-        outputs = list(blob_val.predictions)
+        outputs = [None] * len(inputs)
+        for (index, prediction) in zip(indices, blob_val.predictions):
+            outputs[index] = prediction
+
         return outputs
 
 
@@ -100,13 +111,22 @@ factory.start()
 
 @app.route('/classify/food_types', methods=['POST'])
 def classify():
-    json = flask.request.get_json()
-    for item in json:
-        item['photoRawContent'] = base64.standard_b64decode(item['photoContent'])
-
+    items = flask.request.get_json()
     task_id = flask.request.headers.get('task-id', None)
     task_id = task_id and int(task_id)
-    task = Task(json, task_id=task_id)
-    with Timer(message='task({}).eval(size={})'.format(task.task_id, len(json))):
+
+    for item in items:
+        try:
+            content = base64.standard_b64decode(item['photoContent'])
+            if len(content) == 0:
+                content = None
+        except:
+            print('Exception raised by {}'.format(item['photoName']))
+            content = None
+
+        item['photoContentDecoded'] = content
+
+    task = Task(items, task_id=task_id)
+    with Timer(message='task({}).eval(size={})'.format(task.task_id, len(items))):
         results = task.eval(factory=factory)
     return flask.json.jsonify(results)
