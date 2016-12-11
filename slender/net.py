@@ -76,22 +76,22 @@ class BaseNet(object):
             )
 
             with tf.variable_scope(_('forward')):
-                self.feats = tf.reduce_max(
+                self.feats = net = tf.reduce_max(
                     net,
                     (1, 2),
                     keep_dims=True,
                     name='feats',
                 )
-                self.logits = slim.conv2d(
-                    self.feats,
+                self.logits = net = slim.conv2d(
+                    net,
                     self.num_classes,
                     (1, 1),
                     activation_fn=None,
                     normalizer_fn=None,
                     scope='logits',
                 )
-                self.predictions = slim.softmax(
-                    self.logits,
+                self.predictions = net = slim.softmax(
+                    net,
                     scope='predictions',
                 )
 
