@@ -94,26 +94,34 @@ class Factory(BatchFactory):
         return outputs
 
 
-def classify_func(app, url, factory):
-    @app.route(url, methods=['POST'])
-    def classify():
-        items = flask.request.get_json()
-        task_id = flask.request.headers.get('task-id', None)
-        task_id = task_id and int(task_id)
+class App(flask.Flask):
+    def __init__(self, import_name):
+        super(App, self).__init__(import_name)
 
-        for item in items:
-            try:
-                content = base64.standard_b64decode(item['photoContent'])
-                if len(content) == 0:
+        self.config.update(
+            JSON_SORT_KEYS=False,
+            JSONIFY_PRETTYPRINT_REGULAR=False,
+        )
+
+    def start(self, url, factory):
+        @self.route(url, methods=['POST'])
+        def classify():
+            items = flask.request.get_json()
+            task_id = flask.request.headers.get('task-id', None)
+            task_id = task_id and int(task_id)
+
+            for item in items:
+                try:
+                    content = base64.standard_b64decode(item['photoContent'])
+                    if len(content) == 0:
+                        content = None
+                except:
+                    print('Exception raised by {}'.format(item['photoName']))
                     content = None
-            except:
-                print('Exception raised by {}'.format(item['photoName']))
-                content = None
 
-            item['photoContentDecoded'] = content
+                item['photoContentDecoded'] = content
 
-        task = Task(items, task_id=task_id)
-        with Timer(message='task({}).eval(size={})'.format(task.task_id, len(items))):
-            results = task.eval(factory=factory)
-        return flask.json.jsonify(results)
-    return classify
+            task = Task(items, task_id=task_id)
+            with Timer(message='task({}).eval(size={})'.format(task.task_id, len(items))):
+                results = task.eval(factory=factory)
+            return flask.json.jsonify(results)

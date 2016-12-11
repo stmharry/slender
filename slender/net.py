@@ -71,13 +71,19 @@ class BaseNet(object):
         with slim.arg_scope(self.arg_scope):
             (net, self.end_points) = _NET(
                 self.images,
-                global_pool=True,
+                global_pool=False,
                 scope=_NET_SCOPE,
             )
 
             with tf.variable_scope(_('forward')):
-                self.logits = slim.conv2d(
+                self.feats = tf.reduce_max(
                     net,
+                    (1, 2),
+                    keep_dims=True,
+                    name='feats',
+                )
+                self.logits = slim.conv2d(
+                    self.feats,
                     self.num_classes,
                     (1, 1),
                     activation_fn=None,

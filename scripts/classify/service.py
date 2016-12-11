@@ -1,15 +1,9 @@
-import flask
-
 from slender.processor import List
 from slender.util import latest_working_dir
 
-from util import Factory, classify_func
+from model import Factory, App
 
-app = flask.Flask(__name__)
-app.config.update(
-    JSON_SORT_KEYS=False,
-    JSONIFY_PRETTYPRINT_REGULAR=False,
-)
+app = App(__name__)
 
 factory = Factory(
     working_dir=latest_working_dir('/mnt/data/food-save'),
@@ -22,8 +16,7 @@ factory = Factory(
 )
 factory.start()
 
-classify = classify_func(
-    app=app,
+app.start(
     url='/classify/food_types',
     factory=factory,
 )
