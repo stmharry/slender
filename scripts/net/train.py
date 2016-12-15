@@ -9,8 +9,8 @@ WORKING_DIR = new_working_dir(WORKING_DIR_ROOT)
 BATCH_SIZE = 64
 SUBSAMPLE_FN = Producer.SubsampleFunction.HASH(mod=64, divisible=False)
 MIX_SCHEME = Producer.MixScheme.UNIFORM
-GPU_FRAC = 0.5
-LEARNING_RATE = 0.1
+GPU_FRAC = 0.6
+LEARNING_RATE = 0.01
 NUM_TRAIN_EPOCHS = 15
 NUM_DECAY_EPOCHS = 1.5
 

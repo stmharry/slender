@@ -17,7 +17,12 @@ _ARG_SCOPE_FN = resnet_v1.resnet_arg_scope
 
 _NET_SCOPE = _NET.__name__
 __ = scope_join_fn(_NET_SCOPE)
-_CKPT_PATH = os.path.join(os.path.dirname(__file__), os.pardir, 'model', _NET_SCOPE + '.ckpt')
+_CKPT_PATH = os.path.join(
+    os.path.realpath(os.path.dirname(__file__)),
+    os.pardir,
+    'model',
+    _NET_SCOPE + '.ckpt',
+)
 
 
 class BaseNet(object):
@@ -76,7 +81,7 @@ class BaseNet(object):
             )
 
             with tf.variable_scope(_('forward')):
-                self.feats = net = tf.reduce_max(
+                self.feats = net = tf.reduce_mean(
                     net,
                     (1, 2),
                     keep_dims=True,
