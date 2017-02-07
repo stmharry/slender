@@ -296,7 +296,7 @@ class TestProcessor(BaseProcessor):
                  batch_size=64):
 
         super(TestProcessor, self).__init__(
-            net_dim=net_dim or max(shorter_dim.val_list),
+            net_dim=net_dim or min(shorter_dim.val_list),
             shorter_dim=shorter_dim,
             aspect_ratio=aspect_ratio,
             num_duplicates=num_duplicates,

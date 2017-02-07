@@ -10,7 +10,7 @@ BATCH_SIZE = 64
 SUBSAMPLE_FN = Producer.SubsampleFunction.HASH(mod=64, divisible=False)
 MIX_SCHEME = Producer.MixScheme.UNIFORM
 GPU_FRAC = 0.6
-LEARNING_RATE = 0.01
+LEARNING_RATE = 0.1
 NUM_TRAIN_EPOCHS = 15
 NUM_DECAY_EPOCHS = 1.5
 

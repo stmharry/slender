@@ -97,7 +97,7 @@ class LocalFileProducer(BaseProducer):
 
         self.filenames_per_class = [[
             os.path.join(file_dir, file_name)
-                for (file_dir, _, file_names) in os.walk(os.path.join(image_dir, class_name))
+                for (file_dir, _, file_names) in os.walk(os.path.join(image_dir, class_name), followlinks=True)
                 for file_name in file_names
                 if not file_name.startswith('.')
                 if subsample_fn(file_name)

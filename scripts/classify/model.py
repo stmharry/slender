@@ -1,6 +1,8 @@
 import base64
 import collections
+import tensorflow as tf
 import flask
+import flask.views
 
 from slender.producer import PlaceholderProducer as Producer
 from slender.processor import TestProcessor as Processor
@@ -69,13 +71,17 @@ class Factory(BatchFactory):
             num_classes=producer.num_classes,
             gpu_frac=gpu_frac,
         )
-        blob = producer.blob().funcs([
-            processor.preprocess,
-            net.forward,
-            processor.postprocess,
-        ])
-        net.init()
+
+        with tf.Graph().as_default():
+            blob = producer.blob().funcs([
+                processor.preprocess,
+                net.forward,
+                processor.postprocess,
+            ])
+            net.init()
+
         self.__dict__.update(locals())
+        self.start()
 
     def run_one(self, inputs):
         indices = [index for index in xrange(len(inputs)) if inputs[index]['photoContentDecoded'] is not None]
@@ -94,6 +100,34 @@ class Factory(BatchFactory):
         return outputs
 
 
+class View(flask.views.View):
+    methods = ['POST']
+
+    def __init__(self, factory):
+        self.factory = factory
+
+    def dispatch_request(self):
+        items = flask.request.get_json()
+        task_id = flask.request.headers.get('task-id', None)
+        task_id = task_id and int(task_id)
+
+        for item in items:
+            try:
+                content = base64.standard_b64decode(item['photoContent'])
+                if len(content) == 0:
+                    content = None
+            except:
+                print('Exception raised by {}'.format(item['photoName']))
+                content = None
+
+            item['photoContentDecoded'] = content
+
+        task = Task(items, task_id=task_id)
+        with Timer(message='task({}).eval(size={})'.format(task.task_id, len(items))):
+            results = task.eval(factory=self.factory)
+        return flask.json.jsonify(results)
+
+
 class App(flask.Flask):
     def __init__(self, import_name):
         super(App, self).__init__(import_name)
@@ -103,25 +137,8 @@ class App(flask.Flask):
             JSONIFY_PRETTYPRINT_REGULAR=False,
         )
 
-    def start(self, url, factory):
-        @self.route(url, methods=['POST'])
-        def classify():
-            items = flask.request.get_json()
-            task_id = flask.request.headers.get('task-id', None)
-            task_id = task_id and int(task_id)
-
-            for item in items:
-                try:
-                    content = base64.standard_b64decode(item['photoContent'])
-                    if len(content) == 0:
-                        content = None
-                except:
-                    print('Exception raised by {}'.format(item['photoName']))
-                    content = None
-
-                item['photoContentDecoded'] = content
-
-            task = Task(items, task_id=task_id)
-            with Timer(message='task({}).eval(size={})'.format(task.task_id, len(items))):
-                results = task.eval(factory=factory)
-            return flask.json.jsonify(results)
+    def add_route(self, url, factory):
+        self.add_url_rule(
+            url,
+            view_func=View.as_view(url, factory=factory),
+        )
