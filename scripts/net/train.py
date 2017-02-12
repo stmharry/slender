@@ -45,11 +45,12 @@ class Factory(object):
         blob = producer.blob().funcs([
             processor.preprocess,
             net.forward,
+            net.eval,
         ])
         self.__dict__.update(locals())
 
     def run(self):
-        self.net.eval(self.num_train_epochs * self.producer.num_batches_per_epoch)
+        self.net.run(self.num_train_epochs * self.producer.num_batches_per_epoch)
 
 
 if __name__ == '__main__':
