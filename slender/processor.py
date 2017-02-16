@@ -245,7 +245,7 @@ class BaseProcessor(object):
     def postprocess(self, blob):
         with tf.variable_scope(_('postprocess')):
             blob_dict = {}
-            for (key, value) in blob._dict.iteritems():
+            for (key, value) in blob.items():
                 shape = value.get_shape().as_list()
                 new_shape = [-1, self.num_repeats] + shape[1:]
                 value = tf.reshape(value, new_shape)

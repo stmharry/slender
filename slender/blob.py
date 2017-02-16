@@ -1,18 +1,16 @@
-class Blob(object):
+from .util import composite
+
+
+class Blob(dict):
     def __init__(self, **kwargs):
-        self._dict = kwargs
+        super(Blob, self).__init__(**kwargs)
         for (key, value) in kwargs.iteritems():
             setattr(self, key, value)
 
-    def func(self, fn):
-        return fn(self)
-
-    def funcs(self, fns):
-        if fns:
-            return fns[0](self).funcs(fns[1:])
-        else:
-            return self
+    def f(self, functions):
+        composited = composite(*functions)
+        return composited(self)
 
     def eval(self, sess, **kwargs):
-        output = sess.run(self._dict, **kwargs)
+        output = sess.run(self, **kwargs)
         return Blob(**output)

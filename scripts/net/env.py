@@ -1,4 +1,4 @@
-TARGET = 'content'
+target = 'content'
 
-IMAGE_DIR = '/mnt/data/{}-img'.format(TARGET)
-WORKING_DIR_ROOT = '/mnt/data/{}-save'.format(TARGET)
+image_dir = '/mnt/data/{:s}-img'.format(target)
+working_dir_root = '/mnt/data/{:s}-save'.format(target)
