@@ -26,11 +26,11 @@ if __name__ == '__main__':
         num_classes=producer.num_classes,
         gpu_frac=gpu_frac,
     )
+
     blob = (
         producer.blob()
         .f(processor.preprocess)
         .f(net.forward)
         .f(net.eval)
     )
-
     net.eval(producer.num_batches_per_epoch)

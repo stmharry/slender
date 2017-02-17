@@ -38,5 +38,4 @@ if __name__ == '__main__':
         .f(net.forward)
         .f(net.eval)
     )
-
     net.run(num_train_epochs * producer.num_batches_per_epoch)
