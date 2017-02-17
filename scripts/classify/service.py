@@ -4,6 +4,7 @@ from model import App, Factory
 
 app = App(__name__)
 
+'''
 app.add_route(
     url='/classify/6_categories',
     factory=Factory(
@@ -16,6 +17,7 @@ app.add_route(
         timeout_fn=Factory.TimeoutFunction.QUARDRATIC(offset=0.02, delta=0.01),
     ),
 )
+'''
 
 app.add_route(
     url='/classify/food_types',
@@ -29,4 +31,3 @@ app.add_route(
         timeout_fn=Factory.TimeoutFunction.QUARDRATIC(offset=0.02, delta=0.01),
     ),
 )
-

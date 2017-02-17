@@ -144,14 +144,13 @@ class TrainMixin(BaseMixin):
             BaseNet.get_scope_set(self.scopes_to_freeze)
         )
 
-        global_step = slim.get_or_create_global_step()
-        total_loss = slim.losses.get_total_loss()
         learning_rate = tf.constant(
             self.learning_rate,
             dtype=tf.float32,
             name='learning_rate',
         )
         if self.learning_rate_decay_steps is not None:
+            global_step = slim.get_or_create_global_step()
             learning_rate = tf.train.exponential_decay(
                 learning_rate,
                 global_step=global_step,
@@ -161,6 +160,7 @@ class TrainMixin(BaseMixin):
                 name='decaying_learning_rate',
             )
 
+        total_loss = slim.losses.get_total_loss()
         optimizer = tf.train.AdamOptimizer(learning_rate, epsilon=1.0)
         self.train_op = slim.learning.create_train_op(
             total_loss,
