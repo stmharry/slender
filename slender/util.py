@@ -21,15 +21,6 @@ def scope_join_fn(scope):
     return scope_join
 
 
-def composite(*functions):
-    def composite2(f, g):
-        def gf(x):
-            return g(f(x))
-        return gf
-
-    return reduce(composite2, functions)
-
-
 def LOG(value, name=None, fn=tf.identity):
     value = tf.Print(value, [fn(value)], '{}: '.format(name or value.__name__))
     return value
