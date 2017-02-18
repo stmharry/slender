@@ -40,11 +40,14 @@ class BaseNet(object):
 
 
 class ResNet50(BaseNet):
+    VAR_SCOPE = 'resnet_v1_50'
+
     def __init__(self,
                  is_training,
                  num_classes,
                  weight_decay=1e-3,
                  ckpt_path=None,
+                 scope=None,
                  scopes_to_restore=None,
                  scopes_to_freeze=None,
                  gpu_frac=1.0,
@@ -52,9 +55,10 @@ class ResNet50(BaseNet):
                  verbosity=tf.logging.INFO):
 
         from tensorflow.contrib.slim.nets import resnet_v1
+        scope = None # TODO: allow remapping when assigning from ckpt
 
         self.__net = resnet_v1
-        self.__var_scope = 'resnet_v1_50'
+        self.__var_scope = scope_join_fn(scope)(ResNet50.VAR_SCOPE)
         self.__scope_join = scope_join_fn(self.__var_scope)
         self.__ckpt_path = os.path.join(
             os.path.realpath(os.path.dirname(__file__)),
@@ -63,16 +67,14 @@ class ResNet50(BaseNet):
             'resnet_v1_50.ckpt',
         )
 
-        self.__scopes_to_restore = [
-            self.__var_scope,
-        ]
-        self.__scopes_to_freeze = [
-            self.__scope_join(scope) for scope in [
-                'conv1',
-                'block1',
-                'block2',
-            ]
-        ]
+        self.__scopes_to_restore = map(self.__scope_join, [
+            None,
+        ])
+        self.__scopes_to_freeze = map(self.__scope_join, [
+            'conv1',
+            'block1',
+            'block2',
+        ])
 
         self.ckpt_path = ckpt_path or self.__ckpt_path
         self.scopes_to_restore = scopes_to_restore or self.__scopes_to_restore
@@ -104,30 +106,40 @@ class ResNet50(BaseNet):
 
 
 class BaseMixin(object):
+    VAR_SCOPE = 'base'
+
     def __init__(self,
                  scope,
                  working_dir):
 
-        self.__scope = scope
-        self.__scope_join = scope_join_fn(self.__scope)
+        self.__var_scope = scope_join_fn(scope)(BaseMixin.VAR_SCOPE)
+        self.__scope_join = scope_join_fn(self.__var_scope)
         self.working_dir = working_dir
+        self.log_dir = os.path.join(working_dir, scope)
 
     def eval(self, blob):
-        summary_ops = [
-            tf.scalar_summary(self.__scope_join(key), value)
-            for (key, value) in blob.items()
-        ]
+        with tf.variable_scope(self.__var_scope):
+            summary_ops = [
+                tf.scalar_summary(self.__scope_join(key), value)
+                for (key, value) in blob.items()
+            ]
 
 
 class TrainMixin(BaseMixin):
+    VAR_SCOPE = 'train'
+
     def __init__(self,
                  working_dir,
+                 scope=None,
                  learning_rate=1.0,
                  learning_rate_decay_steps=None,
                  learning_rate_decay_rate=0.5):
 
+        self.__var_scope = scope_join_fn(scope)(TrainMixin.VAR_SCOPE)
+        self.__scope_join = scope_join_fn(self.__var_scope)
+
         super(TrainMixin, self).__init__(
-            scope='train',
+            scope=self.__var_scope,
             working_dir=working_dir,
         )
 
@@ -138,46 +150,47 @@ class TrainMixin(BaseMixin):
     def eval(self, blob):
         super(TrainMixin, self).eval(blob)
 
-        vars_to_restore = BaseNet.get_scope_set(self.scopes_to_restore)
-        vars_to_train = (
-            BaseNet.get_scope_set(collection=tf.GraphKeys.TRAINABLE_VARIABLES) -
-            BaseNet.get_scope_set(self.scopes_to_freeze)
-        )
-
-        learning_rate = tf.constant(
-            self.learning_rate,
-            dtype=tf.float32,
-            name='learning_rate',
-        )
-        if self.learning_rate_decay_steps is not None:
-            global_step = slim.get_or_create_global_step()
-            learning_rate = tf.train.exponential_decay(
-                learning_rate,
-                global_step=global_step,
-                decay_steps=self.learning_rate_decay_steps,
-                decay_rate=self.learning_rate_decay_rate,
-                staircase=True,
-                name='decaying_learning_rate',
+        with tf.variable_scope(self.__var_scope):
+            vars_to_restore = BaseNet.get_scope_set(self.scopes_to_restore)
+            vars_to_train = (
+                BaseNet.get_scope_set(collection=tf.GraphKeys.TRAINABLE_VARIABLES) -
+                BaseNet.get_scope_set(self.scopes_to_freeze)
             )
 
-        total_loss = slim.losses.get_total_loss()
-        optimizer = tf.train.AdamOptimizer(learning_rate, epsilon=1.0)
-        self.train_op = slim.learning.create_train_op(
-            total_loss,
-            optimizer,
-            variables_to_train=vars_to_train,
-        )
+            learning_rate = tf.constant(
+                self.learning_rate,
+                dtype=tf.float32,
+                name='learning_rate',
+            )
+            if self.learning_rate_decay_steps is not None:
+                global_step = slim.get_or_create_global_step()
+                learning_rate = tf.train.exponential_decay(
+                    learning_rate,
+                    global_step=global_step,
+                    decay_steps=self.learning_rate_decay_steps,
+                    decay_rate=self.learning_rate_decay_rate,
+                    staircase=True,
+                    name='decaying_learning_rate',
+                )
 
-        all_vars = BaseNet.get_scope_set()
-        init_op = tf.initialize_variables(all_vars - vars_to_restore)
-        (assign_op, assign_feed_dict) = slim.assign_from_checkpoint(
-            self.ckpt_path,
-            list(vars_to_restore),
-        )
+            total_loss = slim.losses.get_total_loss()
+            optimizer = tf.train.AdamOptimizer(learning_rate, epsilon=1.0)
+            self.train_op = slim.learning.create_train_op(
+                total_loss,
+                optimizer,
+                variables_to_train=vars_to_train,
+            )
 
-        self.init_op = tf.group(assign_op, init_op)
-        self.init_feed_dict = assign_feed_dict
-        self.saver = tf.train.Saver(all_vars)
+            all_vars = BaseNet.get_scope_set()
+            init_op = tf.initialize_variables(all_vars - vars_to_restore)
+            (assign_op, assign_feed_dict) = slim.assign_from_checkpoint(
+                self.ckpt_path,
+                list(vars_to_restore),
+            )
+
+            self.init_op = tf.group(assign_op, init_op)
+            self.init_feed_dict = assign_feed_dict
+            self.saver = tf.train.Saver(all_vars)
 
     def run(self,
             number_of_steps,
@@ -186,8 +199,8 @@ class TrainMixin(BaseMixin):
             save_interval_secs=600):
 
         slim.learning.train(
-            self.train_op,
-            self.working_dir,
+            train_op=self.train_op,
+            logdir=self.log_dir,
             log_every_n_steps=log_every_n_steps,
             number_of_steps=number_of_steps,
             init_op=self.init_op,
@@ -199,25 +212,33 @@ class TrainMixin(BaseMixin):
         )
 
 
-class TestMixin(object):
+class TestMixin(BaseMixin):
+    VAR_SCOPE = 'test'
+
     def __init__(self,
-                 working_dir):
+                 working_dir,
+                 scope=None):
+
+        self.__var_scope = scope_join_fn(scope)(TestMixin.VAR_SCOPE)
+        self.__scope_join = scope_join_fn(self.__var_scope)
 
         super(TestMixin, self).__init__(
-            scope='test',
+            scope=self.__var_scope,
             working_dir=working_dir,
         )
 
     def eval(self, blob):
-        (values, _) = slim.metrics.aggregate_metrics(*[
-            slim.metrics.streaming_mean(value)
-            for value in blob.values()
-        ])
+        with tf.variable_scope(self.__var_scope):
+            (values, update_ops) = slim.metrics.aggregate_metrics(*[
+                slim.metrics.streaming_mean(value)
+                for value in blob.values()
+            ])
+            self.eval_op = tf.group(*update_ops)
 
-        blob = Blob({
-            key: value
-            for (key, value) in zip(blob.keys(), values)
-        })
+            blob = Blob(**{
+                key: value
+                for (key, value) in zip(blob.keys(), values)
+            })
 
         super(TestMixin, self).eval(blob)
 
@@ -227,11 +248,11 @@ class TestMixin(object):
             timeout=600):
 
         slim.evaluation.evaluation_loop(
-            '',
-            self.working_dir,
-            os.path.join(self.working_dir, 'test'),
+            master='',
+            checkpoint_dir=self.working_dir,
+            logdir=self.log_dir,
             num_evals=num_steps,
-            eval_op=self.metric_updates,
+            eval_op=self.eval_op,
             eval_interval_secs=eval_interval_secs,
             session_config=self.session_config,
             timeout=timeout,
@@ -243,16 +264,21 @@ class ClassifyNet(ResNet50):
                  is_training,
                  num_classes,
                  weight_decay=1e-3,
+                 scope=None,
                  scopes_to_restore=None,
                  scopes_to_freeze=None,
                  gpu_frac=1.0,
                  log_device_placement=False,
                  verbosity=tf.logging.INFO):
 
+        self.__var_scope = scope_join_fn(scope)('classify_net')
+        self.__scope_join = scope_join_fn(self.__var_scope)
+
         super(ClassifyNet, self).__init__(
             is_training=is_training,
             num_classes=num_classes,
             weight_decay=weight_decay,
+            scope=self.__var_scope,
             scopes_to_restore=scopes_to_restore,
             scopes_to_freeze=scopes_to_freeze,
             gpu_frac=gpu_frac,
@@ -260,8 +286,6 @@ class ClassifyNet(ResNet50):
             verbosity=verbosity,
         )
 
-        self.__var_scope = 'classify_net'
-        self.__scope_join = scope_join_fn(self.__var_scope)
 
     def forward(self, blob):
         blob = super(ClassifyNet, self).forward(blob)

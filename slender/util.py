@@ -17,7 +17,7 @@ def latest_working_dir(working_dir_root):
 
 def scope_join_fn(scope):
     def scope_join(*args):
-        return os.path.join(scope, *args)
+        return '/'.join(filter(None, [scope] + list(args)))
     return scope_join
 
 

@@ -33,4 +33,4 @@ if __name__ == '__main__':
         .f(net.forward)
         .f(net.eval)
     )
-    net.eval(producer.num_batches_per_epoch)
+    net.run(producer.num_batches_per_epoch)
