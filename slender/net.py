@@ -20,12 +20,10 @@ class BaseNet(object):
         ])
 
     def __init__(self,
-                 num_classes,
                  gpu_frac=1.0,
                  log_device_placement=False,
                  verbosity=tf.logging.INFO):
 
-        self.num_classes = num_classes
         self.session_config = tf.ConfigProto(
             gpu_options=tf.GPUOptions(per_process_gpu_memory_fraction=gpu_frac),
             log_device_placement=log_device_placement,
@@ -41,10 +39,23 @@ class BaseNet(object):
 
 class ResNet50(BaseNet):
     VAR_SCOPE = 'resnet_v1_50'
+    CKPT_PATH = os.path.join(
+        os.path.realpath(os.path.dirname(__file__)),
+        os.pardir,
+        'model',
+        'resnet_v1_50.ckpt',
+    )
+    SCOPES_TO_RESTORE = [
+        None,
+    ]
+    SCOPES_TO_FREEZE = [
+        'conv1',
+        'block1',
+        'block2',
+    ]
 
     def __init__(self,
                  is_training,
-                 num_classes,
                  weight_decay=1e-3,
                  ckpt_path=None,
                  scope=None,
@@ -55,26 +66,15 @@ class ResNet50(BaseNet):
                  verbosity=tf.logging.INFO):
 
         from tensorflow.contrib.slim.nets import resnet_v1
-        scope = None # TODO: allow remapping when assigning from ckpt
+        scope = None  # TODO: allow remapping when assigning from ckpt
 
         self.__net = resnet_v1
         self.__var_scope = scope_join_fn(scope)(ResNet50.VAR_SCOPE)
         self.__scope_join = scope_join_fn(self.__var_scope)
-        self.__ckpt_path = os.path.join(
-            os.path.realpath(os.path.dirname(__file__)),
-            os.pardir,
-            'model',
-            'resnet_v1_50.ckpt',
-        )
 
-        self.__scopes_to_restore = map(self.__scope_join, [
-            None,
-        ])
-        self.__scopes_to_freeze = map(self.__scope_join, [
-            'conv1',
-            'block1',
-            'block2',
-        ])
+        self.__ckpt_path = ResNet50.CKPT_PATH
+        self.__scopes_to_restore = map(self.__scope_join, ResNet50.SCOPES_TO_RESTORE)
+        self.__scopes_to_freeze = map(self.__scope_join, ResNet50.SCOPES_TO_FREEZE)
 
         self.ckpt_path = ckpt_path or self.__ckpt_path
         self.scopes_to_restore = scopes_to_restore or self.__scopes_to_restore
@@ -85,7 +85,6 @@ class ResNet50(BaseNet):
         )
 
         super(ResNet50, self).__init__(
-            num_classes=num_classes,
             gpu_frac=gpu_frac,
             log_device_placement=log_device_placement,
             verbosity=verbosity,
@@ -109,17 +108,17 @@ class BaseMixin(object):
     VAR_SCOPE = 'base'
 
     def __init__(self,
-                 scope,
-                 working_dir):
+                 working_dir,
+                 scope=None):
 
         self.__var_scope = scope_join_fn(scope)(BaseMixin.VAR_SCOPE)
         self.__scope_join = scope_join_fn(self.__var_scope)
         self.working_dir = working_dir
         self.log_dir = os.path.join(working_dir, scope)
 
-    def eval(self, blob):
+    def summary(self, blob):
         with tf.variable_scope(self.__var_scope):
-            summary_ops = [
+            self.summary_ops = [
                 tf.scalar_summary(self.__scope_join(key), value)
                 for (key, value) in blob.items()
             ]
@@ -148,7 +147,7 @@ class TrainMixin(BaseMixin):
         self.learning_rate_decay_rate = learning_rate_decay_rate
 
     def eval(self, blob):
-        super(TrainMixin, self).eval(blob)
+        self.summary(blob)
 
         with tf.variable_scope(self.__var_scope):
             vars_to_restore = BaseNet.get_scope_set(self.scopes_to_restore)
@@ -240,7 +239,7 @@ class TestMixin(BaseMixin):
                 for (key, value) in zip(blob.keys(), values)
             })
 
-        super(TestMixin, self).eval(blob)
+        self.summary(blob)
 
     def run(self,
             num_steps,
@@ -259,7 +258,50 @@ class TestMixin(BaseMixin):
         )
 
 
+class OnlineMixin(BaseMixin):
+    VAR_SCOPE = 'online'
+
+    def __init__(self,
+                 working_dir,
+                 scope=None):
+
+        self.__var_scope = scope_join_fn(scope)(OnlineMixin.VAR_SCOPE)
+        self.__scope_join = scope_join_fn(self.__var_scope)
+
+        super(OnlineMixin, self).__init__(
+            scope=self.__var_scope,
+            working_dir=working_dir,
+        )
+
+        self.sess = None
+
+    def eval(self, blob):
+        with tf.variable_scope(self.__var_scope):
+            vars_to_restore = BaseNet.get_scope_set()
+            (assign_op, assign_feed_dict) = slim.assign_from_checkpoint(
+                tf.train.latest_checkpoint(self.working_dir),
+                list(vars_to_restore),
+            )
+
+            self.init_op = assign_op
+            self.init_feed_dict = assign_feed_dict
+
+    def run(self,
+            blob,
+            feed_dict=None):
+
+        if self.sess is None:
+            self.sess = tf.Session(
+                config=self.session_config,
+            )
+            self.sess.run(self.init_op, feed_dict=self.init_feed_dict)
+
+        return blob.eval(self.sess, feed_dict=feed_dict)
+
+
 class ClassifyNet(ResNet50):
+    VAR_SCOPE = 'classify_net'
+
     def __init__(self,
                  is_training,
                  num_classes,
@@ -271,12 +313,11 @@ class ClassifyNet(ResNet50):
                  log_device_placement=False,
                  verbosity=tf.logging.INFO):
 
-        self.__var_scope = scope_join_fn(scope)('classify_net')
+        self.__var_scope = scope_join_fn(scope)(ClassifyNet.VAR_SCOPE)
         self.__scope_join = scope_join_fn(self.__var_scope)
 
         super(ClassifyNet, self).__init__(
             is_training=is_training,
-            num_classes=num_classes,
             weight_decay=weight_decay,
             scope=self.__var_scope,
             scopes_to_restore=scopes_to_restore,
@@ -286,6 +327,7 @@ class ClassifyNet(ResNet50):
             verbosity=verbosity,
         )
 
+        self.num_classes = num_classes
 
     def forward(self, blob):
         blob = super(ClassifyNet, self).forward(blob)
@@ -380,3 +422,43 @@ class TestClassifyNet(ClassifyNet, TestMixin):
             self,
             working_dir=working_dir,
         )
+
+
+class HashNet(ResNet50):
+    VAR_SCOPE = 'hash_net'
+
+    def __init__(self,
+                 is_training,
+                 weight_decay,
+                 scope=None,
+                 scopes_to_restore=None,
+                 scopes_to_freeze=None,
+                 gpu_frac=1.0,
+                 log_device_placement=False,
+                 verbosity=tf.logging.INFO):
+
+        self.__var_scope = scope_join_fn(scope)(HashNet.VAR_SCOPE)
+        self.__scope_join = scope_join_fn(self.__var_scope)
+
+        super(HashNet, self).__init__(
+            is_training=is_training,
+            weight_decay=weight_decay,
+            scope=self.__var_scope,
+            scopes_to_restore=scopes_to_restore,
+            scopes_to_freeze=scopes_to_freeze,
+            gpu_frac=gpu_frac,
+            log_device_placement=log_device_placement,
+            verbosity=verbosity,
+        )
+
+    def forward(self, blob):
+        blob = super(ClassifyNet, self).forward(blob)
+
+        with slim.arg_scope(self.arg_scope), tf.variable_scope(self.__var_scope):
+            feats = tf.reduce_mean(
+                blob.feat_maps,
+                (1, 2),
+                keep_dims=True,
+                name='feats',
+            )
+            # TODO
