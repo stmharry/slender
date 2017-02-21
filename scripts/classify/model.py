@@ -1,44 +1,23 @@
-import base64
 import collections
 import tensorflow as tf
 import flask
 import flask.views
+import numpy as np
 
 from slender.producer import PlaceholderProducer as Producer
-from slender.processor import TestProcessor as Processor
-from slender.net import SimpleNet as Net
-from slender.model import BaseTask, BatchFactory
+from slender.processor import TestProcessor
+from slender.net import OnlineClasssifyNet as Net
+from slender.model import SimpleTask as Task, BatchFactory
 from slender.util import Timer
 
 TOP_K = 6
-PRECISION = 4
+PRECISION_STR = '{:.4f}'
 
 
-class Task(BaseTask):
-    def eval(self, factory):
-        super(Task, self).eval(factory)
-
-        results = []
-        for (input_, output) in zip(self.inputs, self.outputs):
-            if output is None:
-                status = 'error'
-                output = [1.0] + [0.0] * (factory.producer.num_classes - 1)
-            else:
-                status = 'ok'
-
-            indices = sorted(range(len(output)), key=output.__getitem__)[::-1][:TOP_K]
-            classname_probs = collections.OrderedDict([
-                (factory.producer.class_names[index], '{{:.{}f}}'.format(PRECISION).format(output[index]))
-                for index in indices
-            ])
-
-            results.append({
-                'status': status,
-                'photoName': input_['photoName'],
-                'classes': classname_probs,
-            })
-
-        return results
+class Processor(TestProcessor):
+    def preprocess_single(self, content):
+        content = tf.decode_base64(content)
+        return super(Processor, self).preprocess_single(content)
 
 
 class Factory(BatchFactory):
@@ -57,45 +36,61 @@ class Factory(BatchFactory):
             timeout_fn=timeout_fn,
         )
 
-        producer = Producer(
+        self.producer = Producer(
             working_dir=working_dir,
             batch_size=batch_size,
         )
-        processor = Processor(
+        self.processor = Processor(
             net_dim=net_dim,
             shorter_dim=shorter_dim,
             batch_size=batch_size,
         )
-        net = Net(
+        self.net = Net(
             working_dir=working_dir,
             num_classes=producer.num_classes,
             gpu_frac=gpu_frac,
         )
 
-        with tf.Graph().as_default():
-            blob = producer.blob().funcs([
-                processor.preprocess,
-                net.forward,
-                processor.postprocess,
-            ])
-            net.init()
+        with self.net.graph.as_default():
+            self.blob = (
+                self.producer.blob()
+                .f(self.processor.preprocess)
+                .f(self.net.forward)
+                .f(self.processor.postprocess)
+            )
+            self.net.init()
 
-        self.__dict__.update(locals())
         self.start()
 
     def run_one(self, inputs):
-        indices = [index for index in xrange(len(inputs)) if inputs[index]['photoContentDecoded'] is not None]
-        contents = [inputs[index]['photoContentDecoded'] for index in indices]
+        indices = [index for (index, input_) in enumerate(inputs) if len(input_['photoContent']) > 0]
+        contents = [inputs[index]['photoContent'] for index in indices]
 
-        with Timer(message='factory.blob.eval(size={})'.format(len(contents))):
+        with Timer(message='factory.blob.eval(size={:d})'.format(len(contents))):
             blob_val = self.blob.eval(
                 sess=self.net.sess,
                 feed_dict={self.producer.contents: contents},
             )
 
-        outputs = [None] * len(inputs)
-        for (index, prediction) in zip(indices, blob_val.predictions):
-            outputs[index] = prediction
+        outputs = []
+        for (index, input_) in enumerate(inputs):
+            if index in indices:
+                status = 'ok'
+                prediction = blob_val.predictions[index]
+            else:
+                status = 'error'
+                prediction = [1.0] + [0.0] * (factory.producer.num_classes - 1)
+
+            num_classes = np.argsort(prediction)[::-1][:TOP_K]
+            class_names = collections.OrderedDict([
+                (factory.producer.class_names[num_class], PRECISION_STR.format(prediction[num_class]))
+                for num_class in num_classes
+            ])
+            outputs.append({
+                'status': status,
+                'photoName': input_['photoName'],
+                'classes': class_names,
+            })
 
         return outputs
 
@@ -107,25 +102,17 @@ class View(flask.views.View):
         self.factory = factory
 
     def dispatch_request(self):
-        items = flask.request.get_json()
+        inputs = flask.request.get_json()
         task_id = flask.request.headers.get('task-id', None)
-        task_id = task_id and int(task_id)
 
-        for item in items:
-            try:
-                content = base64.standard_b64decode(item['photoContent'])
-                if len(content) == 0:
-                    content = None
-            except:
-                print('Exception raised by {}'.format(item['photoName']))
-                content = None
+        with Timer(message='task({:d}).eval(size={:d})'.format(task.task_id, len(task.inputs))):
+            task = Task(
+                inputs=inputs,
+                task_id=task_id and int(task_id),
+            )
+            outputs = task.eval(factory=self.factory)
 
-            item['photoContentDecoded'] = content
-
-        task = Task(items, task_id=task_id)
-        with Timer(message='task({}).eval(size={})'.format(task.task_id, len(items))):
-            results = task.eval(factory=self.factory)
-        return flask.json.jsonify(results)
+        return flask.json.jsonify(outputs)
 
 
 class App(flask.Flask):

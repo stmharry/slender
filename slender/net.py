@@ -273,8 +273,6 @@ class OnlineMixin(BaseMixin):
             working_dir=working_dir,
         )
 
-        self.sess = None
-
     def eval(self, blob):
         with tf.variable_scope(self.__var_scope):
             vars_to_restore = BaseNet.get_scope_set()
@@ -286,17 +284,12 @@ class OnlineMixin(BaseMixin):
             self.init_op = assign_op
             self.init_feed_dict = assign_feed_dict
 
-    def run(self,
-            blob,
-            feed_dict=None):
-
-        if self.sess is None:
-            self.sess = tf.Session(
-                config=self.session_config,
-            )
-            self.sess.run(self.init_op, feed_dict=self.init_feed_dict)
-
-        return blob.eval(self.sess, feed_dict=feed_dict)
+    def init(self):
+        self.sess = tf.Session(
+            graph=self.graph,
+            config=self.session_config,
+        )
+        self.sess.run(self.init_op, feed_dict=self.init_feed_dict)
 
 
 class ClassifyNet(ResNet50):
@@ -419,6 +412,30 @@ class TestClassifyNet(ClassifyNet, TestMixin):
         )
 
         TestMixin.__init__(
+            self,
+            working_dir=working_dir,
+        )
+
+
+class OnlineClasssifyNet(ClassifyNet, OnlineMixin):
+    def __init__(self,
+                 working_dir,
+                 num_classes,
+                 weight_decay,
+                 gpu_frac=1.0,
+                 log_device_placement=False,
+                 verbosity=tf.logging.INFO):
+
+        ClassifyNet.__init__(
+            self,
+            is_training=False,
+            num_classes=num_classes,
+            gpu_frac=gpu_frac,
+            log_device_placement=log_device_placement,
+            verbosity=verbosity,
+        )
+
+        OnlineMixin.__init__(
             self,
             working_dir=working_dir,
         )

@@ -3,7 +3,7 @@ import threading
 import Queue
 
 
-class BaseTask(object):
+class SimpleTask(object):
     __metaclass__ = abc.ABCMeta
 
     def __init__(self, inputs, task_id=None):
@@ -29,12 +29,14 @@ class BaseTask(object):
     def eval(self, factory):
         factory.queue.put(self)
         self._event.wait()
+        return self.outputs
 
 
 class BatchFactory(threading.Thread):
     __metaclass__ = abc.ABCMeta
 
     SERVE_FOREVER = True
+    QUEUE_SIZE = 1024
 
     class TimeoutFunction(object):
         @staticmethod
@@ -57,7 +59,7 @@ class BatchFactory(threading.Thread):
 
     def __init__(self,
                  batch_size,
-                 queue_size,
+                 queue_size=QUEUE_SIZE,
                  timeout_fn=TimeoutFunction.CONSTANT(offset=0)):
 
         super(BatchFactory, self).__init__()
