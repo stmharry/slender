@@ -5,8 +5,8 @@ import flask.views
 import numpy as np
 
 from slender.producer import PlaceholderProducer as Producer
-from slender.processor import TestProcessor
-from slender.net import OnlineClasssifyNet as Net
+from slender.processor import List, TestProcessor
+from slender.net import OnlineClassifyNet as Net
 from slender.model import SimpleTask as Task, BatchFactory
 from slender.util import Timer
 
@@ -21,14 +21,21 @@ class Processor(TestProcessor):
 
 
 class Factory(BatchFactory):
+    QUEUE_SIZE = 1024
+    BATCH_SIZE = 16
+    NET_DIM = 256
+    SHORTER_DIM = List([256, 512])
+    GPU_FRAC = 0.3
+    TIMEOUT_FN = BatchFactory.TimeoutFunction.QUARDRATIC(offset=0.02, delta=0.01)
+
     def __init__(self,
                  working_dir,
-                 queue_size,
-                 batch_size,
-                 net_dim,
-                 shorter_dim,
-                 gpu_frac,
-                 timeout_fn):
+                 queue_size=QUEUE_SIZE,
+                 batch_size=BATCH_SIZE,
+                 net_dim=NET_DIM,
+                 shorter_dim=SHORTER_DIM,
+                 gpu_frac=GPU_FRAC,
+                 timeout_fn=TIMEOUT_FN):
 
         super(Factory, self).__init__(
             batch_size=batch_size,
@@ -47,7 +54,7 @@ class Factory(BatchFactory):
         )
         self.net = Net(
             working_dir=working_dir,
-            num_classes=producer.num_classes,
+            num_classes=self.producer.num_classes,
             gpu_frac=gpu_frac,
         )
 
@@ -58,7 +65,7 @@ class Factory(BatchFactory):
                 .f(self.net.forward)
                 .f(self.processor.postprocess)
             )
-            self.net.init()
+            self.net.run()
 
         self.start()
 
@@ -79,13 +86,14 @@ class Factory(BatchFactory):
                 prediction = blob_val.predictions[index]
             else:
                 status = 'error'
-                prediction = [1.0] + [0.0] * (factory.producer.num_classes - 1)
+                prediction = [1.0] + [0.0] * (self.producer.num_classes - 1)
 
             num_classes = np.argsort(prediction)[::-1][:TOP_K]
             class_names = collections.OrderedDict([
-                (factory.producer.class_names[num_class], PRECISION_STR.format(prediction[num_class]))
+                (self.producer.class_names[num_class], PRECISION_STR.format(prediction[num_class]))
                 for num_class in num_classes
             ])
+
             outputs.append({
                 'status': status,
                 'photoName': input_['photoName'],
@@ -105,7 +113,7 @@ class View(flask.views.View):
         inputs = flask.request.get_json()
         task_id = flask.request.headers.get('task-id', None)
 
-        with Timer(message='task({:d}).eval(size={:d})'.format(task.task_id, len(task.inputs))):
+        with Timer(message='task({:d}).eval(size={:d})'.format(task_id, len(inputs))):
             task = Task(
                 inputs=inputs,
                 task_id=task_id and int(task_id),

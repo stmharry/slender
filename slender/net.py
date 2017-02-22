@@ -114,13 +114,12 @@ class BaseMixin(object):
         self.__var_scope = scope_join_fn(scope)(BaseMixin.VAR_SCOPE)
         self.__scope_join = scope_join_fn(self.__var_scope)
         self.working_dir = working_dir
-        self.log_dir = os.path.join(working_dir, scope)
 
-    def summary(self, blob):
+    def summary(self):
         with tf.variable_scope(self.__var_scope):
             self.summary_ops = [
-                tf.scalar_summary(self.__scope_join(key), value)
-                for (key, value) in blob.items()
+                tf.scalar_summary(self.__scope_join(attr), self.__getattribute__(attr))
+                for attr in self.summary_attrs
             ]
 
 
@@ -139,17 +138,18 @@ class TrainMixin(BaseMixin):
 
         super(TrainMixin, self).__init__(
             scope=self.__var_scope,
-            working_dir=working_dir,
+            working_dir=os.path.join(working_dir, TrainMixin.VAR_SCOPE),
         )
 
         self.learning_rate = learning_rate
         self.learning_rate_decay_steps = learning_rate_decay_steps
         self.learning_rate_decay_rate = learning_rate_decay_rate
 
-    def eval(self, blob):
-        self.summary(blob)
+    def build(self):
+        self.summary()
 
         with tf.variable_scope(self.__var_scope):
+            all_model_vars = BaseNet.get_scope_set()
             vars_to_restore = BaseNet.get_scope_set(self.scopes_to_restore)
             vars_to_train = (
                 BaseNet.get_scope_set(collection=tf.GraphKeys.TRAINABLE_VARIABLES) -
@@ -189,7 +189,7 @@ class TrainMixin(BaseMixin):
 
             self.init_op = tf.group(assign_op, init_op)
             self.init_feed_dict = assign_feed_dict
-            self.saver = tf.train.Saver(all_vars)
+            self.saver = tf.train.Saver(all_model_vars)
 
     def run(self,
             number_of_steps,
@@ -199,7 +199,7 @@ class TrainMixin(BaseMixin):
 
         slim.learning.train(
             train_op=self.train_op,
-            logdir=self.log_dir,
+            logdir=self.working_dir,
             log_every_n_steps=log_every_n_steps,
             number_of_steps=number_of_steps,
             init_op=self.init_op,
@@ -223,23 +223,24 @@ class TestMixin(BaseMixin):
 
         super(TestMixin, self).__init__(
             scope=self.__var_scope,
-            working_dir=working_dir,
+            working_dir=os.path.join(working_dir, TestMixin.VAR_SCOPE),
         )
 
-    def eval(self, blob):
+        self.train_working_dir = os.path.join(working_dir, TrainMixin.VAR_SCOPE)
+
+    def build(self):
         with tf.variable_scope(self.__var_scope):
             (values, update_ops) = slim.metrics.aggregate_metrics(*[
-                slim.metrics.streaming_mean(value)
-                for value in blob.values()
+                slim.metrics.streaming_mean(self.__getattribute__(attr))
+                for attr in self.summary_attrs
             ])
             self.eval_op = tf.group(*update_ops)
 
-            blob = Blob(**{
-                key: value
-                for (key, value) in zip(blob.keys(), values)
-            })
+            for (attr, value) in zip(self.summary_attrs, values):
+                self.__setattr__(attr, value)
 
-        self.summary(blob)
+        self.summary()
+        self.all_model_vars = BaseNet.get_scope_set()
 
     def run(self,
             num_steps,
@@ -248,11 +249,12 @@ class TestMixin(BaseMixin):
 
         slim.evaluation.evaluation_loop(
             master='',
-            checkpoint_dir=self.working_dir,
-            logdir=self.log_dir,
+            checkpoint_dir=self.train_working_dir,
+            logdir=self.working_dir,
             num_evals=num_steps,
             eval_op=self.eval_op,
             eval_interval_secs=eval_interval_secs,
+            variables_to_restore=self.all_model_vars,
             session_config=self.session_config,
             timeout=timeout,
         )
@@ -273,18 +275,20 @@ class OnlineMixin(BaseMixin):
             working_dir=working_dir,
         )
 
-    def eval(self, blob):
+        self.train_working_dir = os.path.join(working_dir, TrainMixin.VAR_SCOPE)
+
+    def build(self):
         with tf.variable_scope(self.__var_scope):
             vars_to_restore = BaseNet.get_scope_set()
             (assign_op, assign_feed_dict) = slim.assign_from_checkpoint(
-                tf.train.latest_checkpoint(self.working_dir),
+                tf.train.latest_checkpoint(self.train_working_dir),
                 list(vars_to_restore),
             )
 
             self.init_op = assign_op
             self.init_feed_dict = assign_feed_dict
 
-    def init(self):
+    def run(self):
         self.sess = tf.Session(
             graph=self.graph,
             config=self.session_config,
@@ -294,6 +298,7 @@ class OnlineMixin(BaseMixin):
 
 class ClassifyNet(ResNet50):
     VAR_SCOPE = 'classify_net'
+    SUMMARY_ATTRS = ['loss', 'total_loss', 'accuracy']
 
     def __init__(self,
                  is_training,
@@ -302,6 +307,7 @@ class ClassifyNet(ResNet50):
                  scope=None,
                  scopes_to_restore=None,
                  scopes_to_freeze=None,
+                 summary_attrs=None,
                  gpu_frac=1.0,
                  log_device_placement=False,
                  verbosity=tf.logging.INFO):
@@ -321,6 +327,7 @@ class ClassifyNet(ResNet50):
         )
 
         self.num_classes = num_classes
+        self.summary_attrs = summary_attrs or ClassifyNet.SUMMARY_ATTRS
 
     def forward(self, blob):
         blob = super(ClassifyNet, self).forward(blob)
@@ -347,14 +354,14 @@ class ClassifyNet(ResNet50):
 
             predictions = tf.squeeze(predictions, (1, 2))
             targets = tf.one_hot(blob.labels, self.num_classes)
-            loss = slim.losses.log_loss(predictions, targets, weight=self.num_classes)
+            self.loss = slim.losses.log_loss(predictions, targets, weight=self.num_classes)
+            self.total_loss = slim.losses.get_total_loss()
 
             predicted_labels = tf.argmax(predictions, 1)
-            accuracy = slim.metrics.accuracy(predicted_labels, blob.labels)
+            self.accuracy = slim.metrics.accuracy(predicted_labels, blob.labels)
 
         return Blob(
-            loss=loss,
-            accuracy=accuracy,
+            predictions=predictions,
         )
 
 
@@ -392,6 +399,11 @@ class TrainClassifyNet(ClassifyNet, TrainMixin):
             learning_rate_decay_rate=learning_rate_decay_rate,
         )
 
+    def forward(self, blob):
+        blob = ClassifyNet.forward(self, blob)
+        TrainMixin.build(self)
+        return blob
+
 
 class TestClassifyNet(ClassifyNet, TestMixin):
     def __init__(self,
@@ -416,12 +428,17 @@ class TestClassifyNet(ClassifyNet, TestMixin):
             working_dir=working_dir,
         )
 
+    def forward(self, blob):
+        blob = ClassifyNet.forward(self, blob)
+        TestMixin.build(self)
+        return blob
 
-class OnlineClasssifyNet(ClassifyNet, OnlineMixin):
+
+class OnlineClassifyNet(ClassifyNet, OnlineMixin):
     def __init__(self,
                  working_dir,
                  num_classes,
-                 weight_decay,
+                 weight_decay=1e-3,
                  gpu_frac=1.0,
                  log_device_placement=False,
                  verbosity=tf.logging.INFO):
@@ -439,6 +456,11 @@ class OnlineClasssifyNet(ClassifyNet, OnlineMixin):
             self,
             working_dir=working_dir,
         )
+
+    def forward(self, blob):
+        blob = ClassifyNet.forward(self, blob)
+        OnlineMixin.build(self)
+        return blob
 
 
 class HashNet(ResNet50):
