@@ -1,3 +1,4 @@
+import base64
 import collections
 import tensorflow as tf
 import flask
@@ -16,7 +17,12 @@ PRECISION_STR = '{:.4f}'
 
 class Processor(TestProcessor):
     def preprocess_single(self, content):
-        content = tf.decode_base64(content)
+        content = tf.py_func(
+            base64.standard_b64decode,  # tf does not support `standard` b64decode
+            [content],
+            tf.string,
+            stateful=False,
+        )
         return super(Processor, self).preprocess_single(content)
 
 
@@ -113,11 +119,12 @@ class View(flask.views.View):
         inputs = flask.request.get_json()
         task_id = flask.request.headers.get('task-id', None)
 
-        with Timer(message='task({:d}).eval(size={:d})'.format(task_id, len(inputs))):
-            task = Task(
-                inputs=inputs,
-                task_id=task_id and int(task_id),
-            )
+        task = Task(
+            inputs=inputs,
+            task_id=task_id and int(task_id),
+        )
+
+        with Timer(message='task({:d}).eval(size={:d})'.format(task.task_id, len(task.inputs))):
             outputs = task.eval(factory=self.factory)
 
         return flask.json.jsonify(outputs)
