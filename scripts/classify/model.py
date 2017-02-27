@@ -68,7 +68,7 @@ class Factory(BatchFactory):
             self.blob = (
                 self.producer.blob()
                 .f(self.processor.preprocess)
-                .f(self.net.forward)
+                .f(self.net.build)
                 .f(self.processor.postprocess)
             )
             self.net.run()

@@ -38,7 +38,7 @@ if __name__ == '__main__':
     blob = (
         producer.blob()
         .f(processor.preprocess)
-        .f(net.forward)
+        .f(net.build)
     )
     net.run(
         producer.num_batches_per_epoch,

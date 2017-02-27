@@ -11,7 +11,7 @@ from slender.util import new_working_dir
 gflags.DEFINE_string('image_dir', None, 'Image directory')
 gflags.DEFINE_string('working_dir_root', None, 'Root working directory')
 gflags.DEFINE_integer('batch_size', 64, 'Batch size')
-gflags.DEFINE_integer('num_epoch', 15, 'Run epoch count')
+gflags.DEFINE_integer('num_epochs', 15, 'Run epoch count')
 gflags.DEFINE_float('learning_rate', 0.1, 'Learning rate')
 gflags.DEFINE_float('learning_rate_decay_epoch', 1.5, 'Learning rate decay epoch count')
 gflags.DEFINE_float('learning_rate_decay_rate', 0.5, 'Learning rate decay rate')
@@ -42,7 +42,7 @@ if __name__ == '__main__':
     blob = (
         producer.blob()
         .f(processor.preprocess)
-        .f(net.forward)
+        .f(net.build)
     )
-    if FLAGS.num_epoch:
-        net.run(FLAGS.num_epoch * producer.num_batches_per_epoch)
+    if FLAGS.num_epochs:
+        net.run(FLAGS.num_epochs * producer.num_batches_per_epoch)

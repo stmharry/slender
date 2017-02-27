@@ -1,11 +1,10 @@
 import abc
 import os
 import tensorflow as tf
+import tensorflow.contrib.slim as slim
 
 from .blob import Blob
 from .util import scope_join_fn
-
-slim = tf.contrib.slim
 
 
 class BaseNet(object):
@@ -32,6 +31,11 @@ class BaseNet(object):
 
         tf.logging.set_verbosity(verbosity)
 
+    def build(self, blob):
+        blob = self.forward(blob)
+        self.prepare()
+        return blob
+
     @abc.abstractmethod
     def forward(self, blob):
         pass
@@ -53,6 +57,7 @@ class ResNet50(BaseNet):
         'block1',
         'block2',
     ]
+    SUMMARY_ATTRS = []
 
     def __init__(self,
                  is_training,
@@ -61,6 +66,7 @@ class ResNet50(BaseNet):
                  scope=None,
                  scopes_to_restore=None,
                  scopes_to_freeze=None,
+                 summary_attrs=None,
                  gpu_frac=1.0,
                  log_device_placement=False,
                  verbosity=tf.logging.INFO):
@@ -72,13 +78,13 @@ class ResNet50(BaseNet):
         self.__var_scope = scope_join_fn(scope)(ResNet50.VAR_SCOPE)
         self.__scope_join = scope_join_fn(self.__var_scope)
 
-        self.__ckpt_path = ResNet50.CKPT_PATH
         self.__scopes_to_restore = map(self.__scope_join, ResNet50.SCOPES_TO_RESTORE)
         self.__scopes_to_freeze = map(self.__scope_join, ResNet50.SCOPES_TO_FREEZE)
 
-        self.ckpt_path = ckpt_path or self.__ckpt_path
+        self.ckpt_path = ckpt_path or ResNet50.CKPT_PATH
         self.scopes_to_restore = scopes_to_restore or self.__scopes_to_restore
         self.scopes_to_freeze = scopes_to_freeze or self.__scopes_to_freeze
+        self.summary_attrs = summary_attrs or ResNet50.SUMMARY_ATTRS
         self.arg_scope = self.__net.resnet_arg_scope(
             is_training=is_training,
             weight_decay=weight_decay,
@@ -145,7 +151,7 @@ class TrainMixin(BaseMixin):
         self.learning_rate_decay_steps = learning_rate_decay_steps
         self.learning_rate_decay_rate = learning_rate_decay_rate
 
-    def build(self):
+    def prepare(self):
         self.summary()
 
         with tf.variable_scope(self.__var_scope):
@@ -228,7 +234,7 @@ class TestMixin(BaseMixin):
 
         self.train_working_dir = os.path.join(working_dir, TrainMixin.VAR_SCOPE)
 
-    def build(self):
+    def prepare(self):
         with tf.variable_scope(self.__var_scope):
             (values, update_ops) = slim.metrics.aggregate_metrics(*[
                 slim.metrics.streaming_mean(self.__getattribute__(attr))
@@ -277,7 +283,7 @@ class OnlineMixin(BaseMixin):
 
         self.train_working_dir = os.path.join(working_dir, TrainMixin.VAR_SCOPE)
 
-    def build(self):
+    def prepare(self):
         with tf.variable_scope(self.__var_scope):
             vars_to_restore = BaseNet.get_scope_set()
             (assign_op, assign_feed_dict) = slim.assign_from_checkpoint(
@@ -321,13 +327,13 @@ class ClassifyNet(ResNet50):
             scope=self.__var_scope,
             scopes_to_restore=scopes_to_restore,
             scopes_to_freeze=scopes_to_freeze,
+            summary_attrs=summary_attrs or ClassifyNet.SUMMARY_ATTRS,
             gpu_frac=gpu_frac,
             log_device_placement=log_device_placement,
             verbosity=verbosity,
         )
 
         self.num_classes = num_classes
-        self.summary_attrs = summary_attrs or ClassifyNet.SUMMARY_ATTRS
 
     def forward(self, blob):
         blob = super(ClassifyNet, self).forward(blob)
@@ -399,11 +405,6 @@ class TrainClassifyNet(ClassifyNet, TrainMixin):
             learning_rate_decay_rate=learning_rate_decay_rate,
         )
 
-    def forward(self, blob):
-        blob = ClassifyNet.forward(self, blob)
-        TrainMixin.build(self)
-        return blob
-
 
 class TestClassifyNet(ClassifyNet, TestMixin):
     def __init__(self,
@@ -427,11 +428,6 @@ class TestClassifyNet(ClassifyNet, TestMixin):
             self,
             working_dir=working_dir,
         )
-
-    def forward(self, blob):
-        blob = ClassifyNet.forward(self, blob)
-        TestMixin.build(self)
-        return blob
 
 
 class OnlineClassifyNet(ClassifyNet, OnlineMixin):
@@ -457,21 +453,19 @@ class OnlineClassifyNet(ClassifyNet, OnlineMixin):
             working_dir=working_dir,
         )
 
-    def forward(self, blob):
-        blob = ClassifyNet.forward(self, blob)
-        OnlineMixin.build(self)
-        return blob
-
 
 class HashNet(ResNet50):
     VAR_SCOPE = 'hash_net'
+    SUMMARY_ATTRS = ['loss', 'total_loss']
 
     def __init__(self,
                  is_training,
-                 weight_decay,
+                 num_bits,
+                 weight_decay=1e-3,
                  scope=None,
                  scopes_to_restore=None,
                  scopes_to_freeze=None,
+                 summary_attrs=None,
                  gpu_frac=1.0,
                  log_device_placement=False,
                  verbosity=tf.logging.INFO):
@@ -485,19 +479,64 @@ class HashNet(ResNet50):
             scope=self.__var_scope,
             scopes_to_restore=scopes_to_restore,
             scopes_to_freeze=scopes_to_freeze,
+            summary_attrs=summary_attrs or HashNet.SUMMARY_ATTRS,
             gpu_frac=gpu_frac,
             log_device_placement=log_device_placement,
             verbosity=verbosity,
         )
 
+        self.num_bits = num_bits
+
     def forward(self, blob):
-        blob = super(ClassifyNet, self).forward(blob)
+        blob = super(HashNet, self).forward(blob)
 
         with slim.arg_scope(self.arg_scope), tf.variable_scope(self.__var_scope):
             feats = tf.reduce_mean(
                 blob.feat_maps,
                 (1, 2),
-                keep_dims=True,
+                keep_dims=False,
                 name='feats',
             )
-            # TODO
+            with tf.variable_scope('soft_bits'):
+                feat_dim = feats.get_shape()[-1].value
+                kernel = slim.model_variable(
+                    'kernel',
+                    shape=(feat_dim,),
+                    initializer=slim.xavier_initializer(),
+                    collections=tf.GraphKeys.WEIGHTS,
+                )
+                bias = slim.model_variable(
+                    'bias',
+                    shape=(self.num_bits,),
+                    initializer=tf.constant_initializer(0.0),
+                    collections=tf.GraphKeys.BIASES,
+                )
+
+                net = tf.mul(feats, kernel)
+                net = tf.reshape(
+                    net,
+                    (-1, feat_dim / self.num_bits, self.num_bits),
+                )
+                net = tf.reduce_sum(net, 1)
+                net = tf.nn.bias_add(net, bias)
+                soft_bits = tf.tanh(net)
+
+            epsilon = 0.5  # TODO
+            hard_bits = tf.select(
+                tf.abs(soft_bits) > 0,
+                tf.ones_like(soft_bits),
+                tf.abs(soft_bits)
+            ) * tf.sign(soft_bits)
+
+            norms = tf.reduce_sum(tf.square(hard_bits), 1, keep_dims=True)
+            dists = (norms - 2 * tf.matmul(hard_bits, tf.transpose(hard_bits)) + tf.transpose(norms)) / self.num_bits
+
+            labels = tf.expand_dims(blob.labels, 1)
+            targets = tf.not_equal(labels, tf.transpose(labels))
+
+            self.loss = slim.losses.log_loss(dists, targets)
+            self.total_loss = slim.losses.get_total_loss()
+
+        return Blob(
+            hard_bits=hard_bits,
+        )
