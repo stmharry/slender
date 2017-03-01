@@ -60,6 +60,7 @@ class ResNet50(BaseNet):
     SUMMARY_ATTRS = []
 
     def __init__(self,
+                 working_dir,
                  is_training,
                  weight_decay=1e-3,
                  ckpt_path=None,
@@ -307,13 +308,17 @@ class ClassifyNet(ResNet50):
     SUMMARY_ATTRS = ['loss', 'total_loss', 'accuracy']
 
     def __init__(self,
-                 is_training,
                  num_classes,
+                 working_dir,
+                 is_training,
                  weight_decay=1e-3,
                  scope=None,
                  scopes_to_restore=None,
                  scopes_to_freeze=None,
                  summary_attrs=None,
+                 learning_rate=1.0,
+                 learning_rate_decay_steps=None,
+                 learning_rate_decay_rate=0.5,
                  gpu_frac=1.0,
                  log_device_placement=False,
                  verbosity=tf.logging.INFO):
@@ -368,89 +373,6 @@ class ClassifyNet(ResNet50):
 
         return Blob(
             predictions=predictions,
-        )
-
-
-class TrainClassifyNet(ClassifyNet, TrainMixin):
-    def __init__(self,
-                 working_dir,
-                 num_classes,
-                 weight_decay=1e-3,
-                 scopes_to_restore=None,
-                 scopes_to_freeze=None,
-                 learning_rate=1.0,
-                 learning_rate_decay_steps=None,
-                 learning_rate_decay_rate=0.5,
-                 gpu_frac=1.0,
-                 log_device_placement=False,
-                 verbosity=tf.logging.INFO):
-
-        ClassifyNet.__init__(
-            self,
-            is_training=True,
-            num_classes=num_classes,
-            weight_decay=weight_decay,
-            scopes_to_restore=scopes_to_restore,
-            scopes_to_freeze=scopes_to_freeze,
-            gpu_frac=gpu_frac,
-            log_device_placement=log_device_placement,
-            verbosity=verbosity,
-        )
-
-        TrainMixin.__init__(
-            self,
-            working_dir=working_dir,
-            learning_rate=learning_rate,
-            learning_rate_decay_steps=learning_rate_decay_steps,
-            learning_rate_decay_rate=learning_rate_decay_rate,
-        )
-
-
-class TestClassifyNet(ClassifyNet, TestMixin):
-    def __init__(self,
-                 working_dir,
-                 num_classes,
-                 weight_decay=1e-3,
-                 gpu_frac=1.0,
-                 log_device_placement=False,
-                 verbosity=tf.logging.INFO):
-
-        ClassifyNet.__init__(
-            self,
-            is_training=False,
-            num_classes=num_classes,
-            gpu_frac=gpu_frac,
-            log_device_placement=log_device_placement,
-            verbosity=verbosity,
-        )
-
-        TestMixin.__init__(
-            self,
-            working_dir=working_dir,
-        )
-
-
-class OnlineClassifyNet(ClassifyNet, OnlineMixin):
-    def __init__(self,
-                 working_dir,
-                 num_classes,
-                 weight_decay=1e-3,
-                 gpu_frac=1.0,
-                 log_device_placement=False,
-                 verbosity=tf.logging.INFO):
-
-        ClassifyNet.__init__(
-            self,
-            is_training=False,
-            num_classes=num_classes,
-            gpu_frac=gpu_frac,
-            log_device_placement=log_device_placement,
-            verbosity=verbosity,
-        )
-
-        OnlineMixin.__init__(
-            self,
-            working_dir=working_dir,
         )
 
 
