@@ -1,15 +1,16 @@
 import tensorflow as tf
 
 from slender.blob import Blob
-from slender.net import HashNet as Net
+from slender.net import HashNet, TrainScheme
 
+
+class Net(HashNet, TrainScheme):
+    pass
 
 net = Net(
-    is_training=True,
     num_bits=256,
     gpu_frac=0.3,
 )
-
 
 blob = (
     Blob(
@@ -22,3 +23,4 @@ blob = (
 sess = tf.Session()
 sess.run(tf.initialize_all_variables())
 blob_val = blob.eval(sess)
+print(blob_val)

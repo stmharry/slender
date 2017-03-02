@@ -1,10 +1,7 @@
 from __future__ import print_function
 
-import cStringIO
 import numpy as np
 import os
-import re
-import requests
 import sys
 import tensorflow as tf
 

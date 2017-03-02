@@ -5,17 +5,21 @@ import sys
 
 from slender.producer import LocalFileProducer as Producer
 from slender.processor import TestProcessor as Processor
-from slender.net import TestClassifyNet as Net
+from slender.net import ClassifyNet, TestScheme
 from slender.util import latest_working_dir
 
 gflags.DEFINE_string('image_dir', None, 'Image directory')
 gflags.DEFINE_string('working_dir_root', None, 'Root working directory')
 gflags.DEFINE_integer('batch_size', 16, 'Batch size')
+gflags.DEFINE_integer('subsample_ratio', 64, 'Training image subsample')
 gflags.DEFINE_integer('interval', 300, 'Evaluation interval')
 gflags.DEFINE_integer('timeout', 600, 'Timeout in seconds')
 gflags.DEFINE_float('gpu_frac', 1.0, 'Fraction of GPU used')
 FLAGS = gflags.FLAGS
 
+
+class Net(ClassifyNet, TestScheme):
+    pass
 
 if __name__ == '__main__':
     FLAGS(sys.argv)
@@ -25,7 +29,7 @@ if __name__ == '__main__':
         image_dir=FLAGS.image_dir,
         working_dir=working_dir,
         batch_size=FLAGS.batch_size,
-        subsample_fn=Producer.SubsampleFunction.HASH(mod=64, divisible=True),
+        subsample_fn=Producer.SubsampleFunction.HASH(mod=FLAGS.subsample_ratio, divisible=True),
         mix_scheme=Producer.MixScheme.NONE,
     )
     processor = Processor()

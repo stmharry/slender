@@ -228,7 +228,7 @@ class BaseProcessor(object):
         with tf.variable_scope(_('preprocess')):
             images = tf.map_fn(
                 self.preprocess_single,
-                blob.contents,
+                blob['contents'],
                 dtype=tf.float32,
                 parallel_iterations=self.batch_size,
             )
@@ -238,7 +238,7 @@ class BaseProcessor(object):
             self.images = tf.reshape(images, new_shape)
 
             self.num_repeats = shape[1]
-            self.labels = tf.reshape(tf.tile(tf.expand_dims(blob.labels, 1), (1, self.num_repeats)), (-1,))
+            self.labels = tf.reshape(tf.tile(tf.expand_dims(blob['labels'], 1), (1, self.num_repeats)), (-1,))
 
         return Blob(images=self.images, labels=self.labels)
 

@@ -7,7 +7,7 @@ import numpy as np
 
 from slender.producer import PlaceholderProducer as Producer
 from slender.processor import List, TestProcessor
-from slender.net import OnlineClassifyNet as Net
+from slender.net import ClassifyNet, OnlineScheme
 from slender.model import SimpleTask as Task, BatchFactory
 from slender.util import Timer
 
@@ -24,6 +24,10 @@ class Processor(TestProcessor):
             stateful=False,
         )
         return super(Processor, self).preprocess_single(content)
+
+
+class Net(ClassifyNet, OnlineScheme):
+    pass
 
 
 class Factory(BatchFactory):
