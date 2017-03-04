@@ -8,7 +8,7 @@ class Net(HashNet, TrainScheme):
     pass
 
 net = Net(
-    num_bits=256,
+    num_bits=16,
     gpu_frac=0.3,
 )
 
@@ -22,5 +22,5 @@ blob = (
 
 sess = tf.Session()
 sess.run(tf.initialize_all_variables())
-blob_val = blob.eval(sess)
-print(blob_val)
+# val = blob.eval(sess)
+val = sess.run([net.dists, net.hard_bits])

@@ -442,18 +442,25 @@ class HashNet(ResNet50):
             epsilon = 0.5  # TODO
             hard_bits = tf.select(
                 tf.abs(soft_bits) > epsilon,
-                tf.ones_like(soft_bits),
-                tf.abs(soft_bits)
+                t=tf.ones_like(soft_bits),
+                e=tf.abs(soft_bits)
             ) * tf.sign(soft_bits)
+
+            # TODO: verify soft -> hard
 
             norms = tf.reduce_sum(tf.square(hard_bits), 1, keep_dims=True)
             dists = (norms - 2 * tf.matmul(hard_bits, tf.transpose(hard_bits)) + tf.transpose(norms)) / self.num_bits
+
+            # TODO: test dist dormula
 
             labels = tf.expand_dims(blob['labels'], 1)
             targets = tf.not_equal(labels, tf.transpose(labels))
 
             self.loss = slim.losses.log_loss(dists, targets)
             self.total_loss = slim.losses.get_total_loss()
+
+            self.hard_bits = hard_bits
+            self.dists = dists
 
         return Blob(
             hard_bits=hard_bits,
