@@ -112,7 +112,7 @@ class ResNet50(BaseNet):
 
         super(ResNet50, self).__init__(
             working_dir,
-            ckpt_path=ckpt_path,
+            ckpt_path=ckpt_path or ResNet50.CKPT_PATH,
             scopes_to_restore=scopes_to_restore or _scopes_to_restore,
             scopes_to_freeze=scopes_to_freeze or _scopes_to_freeze,
             summary_attrs=summary_attrs or ResNet50.SUMMARY_ATTRS,
@@ -183,10 +183,9 @@ class TrainScheme(BaseScheme):
                     name='decaying_learning_rate',
                 )
 
-            total_loss = slim.losses.get_total_loss()
             optimizer = tf.train.AdamOptimizer(learning_rate, epsilon=1.0)
             self.train_op = slim.learning.create_train_op(
-                total_loss,
+                self.total_loss,
                 optimizer,
                 variables_to_train=vars_to_train,
             )
@@ -439,28 +438,21 @@ class HashNet(ResNet50):
                 net = tf.nn.bias_add(net, bias)
                 soft_bits = tf.tanh(net)
 
-            epsilon = 0.5  # TODO
+            epsilon = 1.0  # TODO
             hard_bits = tf.select(
                 tf.abs(soft_bits) > epsilon,
                 t=tf.ones_like(soft_bits),
-                e=tf.abs(soft_bits)
-            ) * tf.sign(soft_bits)
-
-            # TODO: verify soft -> hard
+                e=tf.abs(soft_bits),
+            ) * tf.sign(soft_bits) / 2
 
             norms = tf.reduce_sum(tf.square(hard_bits), 1, keep_dims=True)
             dists = (norms - 2 * tf.matmul(hard_bits, tf.transpose(hard_bits)) + tf.transpose(norms)) / self.num_bits
 
-            # TODO: test dist dormula
-
             labels = tf.expand_dims(blob['labels'], 1)
             targets = tf.not_equal(labels, tf.transpose(labels))
 
-            self.loss = slim.losses.log_loss(dists, targets)
+            self.loss = slim.losses.log_loss(dists, targets, epsilon=1e-3)
             self.total_loss = slim.losses.get_total_loss()
-
-            self.hard_bits = hard_bits
-            self.dists = dists
 
         return Blob(
             hard_bits=hard_bits,
