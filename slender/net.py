@@ -365,7 +365,7 @@ class ClassifyNet(ResNet50):
 
 class HashNet(ResNet50):
     VAR_SCOPE = 'hash_net'
-    SUMMARY_ATTRS = ['loss', 'total_loss']
+    SUMMARY_ATTRS = ['bandwidth', 'loss', 'total_loss']
 
     def __init__(self,
                  num_bits,
@@ -414,10 +414,13 @@ class HashNet(ResNet50):
                 keep_dims=False,
                 name='feats',
             )
-            with tf.variable_scope('soft_bits'):
+
+            with tf.variable_scope('hash_code'):
+                ''' divide-and-encode
+                '''
                 feat_dim = feats.get_shape()[-1].value
-                kernel = slim.model_variable(
-                    'kernel',
+                weight = slim.model_variable(
+                    'weight',
                     shape=(feat_dim,),
                     initializer=slim.xavier_initializer(),
                     collections=tf.GraphKeys.WEIGHTS,
@@ -429,31 +432,40 @@ class HashNet(ResNet50):
                     collections=tf.GraphKeys.BIASES,
                 )
 
-                net = tf.mul(feats, kernel)
+                net = tf.mul(feats, weight)
                 net = tf.reshape(
                     net,
                     (-1, feat_dim / self.num_bits, self.num_bits),
                 )
                 net = tf.reduce_sum(net, 1)
                 net = tf.nn.bias_add(net, bias)
-                soft_bits = tf.tanh(net)
 
-            epsilon = 1.0  # TODO
-            hard_bits = tf.select(
-                tf.abs(soft_bits) > epsilon,
-                t=tf.ones_like(soft_bits),
-                e=tf.abs(soft_bits),
-            ) * tf.sign(soft_bits) / 2
+                ''' learn by continuation
+                '''
+                hardness = tf.Variable(
+                    1.0,
+                    trainable=False,
+                    dtype=tf.float32,
+                )
+                hash_code = tf.tanh(hardness * net)
 
-            norms = tf.reduce_sum(tf.square(hard_bits), 1, keep_dims=True)
-            dists = (norms - 2 * tf.matmul(hard_bits, tf.transpose(hard_bits)) + tf.transpose(norms)) / self.num_bits
+            ''' adaptive likelihood
+            '''
+            dists = tf.matmul(hash_code, tf.transpose(hash_code)) / tf.sqrt(tf.to_float(self.num_bits))
+            bandwidth = slim.model_variable(
+                'bandwidth',
+                shape=(),
+                initializer=tf.constant_initializer(),
+            )
+            prob = tf.sigmoid(dists / bandwidth)
 
             labels = tf.expand_dims(blob['labels'], 1)
             targets = tf.not_equal(labels, tf.transpose(labels))
 
-            self.loss = slim.losses.log_loss(dists, targets, epsilon=1e-3)
+            self.loss = slim.losses.log_loss(prob, targets, weights=1.0)  # TODO: weights
             self.total_loss = slim.losses.get_total_loss()
 
         return Blob(
-            hard_bits=hard_bits,
+            hash_code=hash_code,
+            prob=prob,
         )
