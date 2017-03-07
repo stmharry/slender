@@ -455,14 +455,19 @@ class HashNet(ResNet50):
             bandwidth = slim.model_variable(
                 'bandwidth',
                 shape=(),
-                initializer=tf.constant_initializer(),
+                initializer=tf.constant_initializer(1.0),
             )
             prob = tf.sigmoid(dists / bandwidth)
 
             labels = tf.expand_dims(blob['labels'], 1)
             targets = tf.not_equal(labels, tf.transpose(labels))
+            weights = tf.select(
+                targets,
+                tf.ones_like(targets) / tf.reduce_sum(targets),
+                tf.ones_like(targets) / tf.reduce_sum(tf.logical_not(targets)),
+            )
 
-            self.loss = slim.losses.log_loss(prob, targets, weights=1.0)  # TODO: weights
+            self.loss = slim.losses.log_loss(prob, targets, weights=weights)
             self.total_loss = slim.losses.get_total_loss()
 
         return Blob(

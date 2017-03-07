@@ -1,0 +1,2 @@
+- benchmark faiss on 2048-d float32 
+- benchmark BallTree on 256-d bool
