@@ -39,6 +39,7 @@ class BaseNet(object):
         self.learning_rate_decay_steps = learning_rate_decay_steps
         self.learning_rate_decay_rate = learning_rate_decay_rate
 
+        self.global_step = slim.get_or_create_global_step()
         self.session_config = tf.ConfigProto(
             gpu_options=tf.GPUOptions(per_process_gpu_memory_fraction=gpu_frac),
             log_device_placement=log_device_placement,
@@ -167,23 +168,22 @@ class TrainScheme(BaseScheme):
                 BaseNet.get_scope_set(self.scopes_to_freeze)
             )
 
-            learning_rate = tf.constant(
+            self.learning_rate = tf.constant(
                 self.learning_rate,
                 dtype=tf.float32,
                 name='learning_rate',
             )
-            global_step = slim.get_or_create_global_step()
             if self.learning_rate_decay_steps is not None:
-                learning_rate = tf.train.exponential_decay(
-                    learning_rate,
-                    global_step=global_step,
+                self.learning_rate = tf.train.exponential_decay(
+                    self.learning_rate,
+                    global_step=self.global_step,
                     decay_steps=self.learning_rate_decay_steps,
                     decay_rate=self.learning_rate_decay_rate,
                     staircase=True,
                     name='decaying_learning_rate',
                 )
 
-            optimizer = tf.train.AdamOptimizer(learning_rate, epsilon=1.0)
+            optimizer = tf.train.AdamOptimizer(self.learning_rate, epsilon=1.0)
             self.train_op = slim.learning.create_train_op(
                 self.total_loss,
                 optimizer,
@@ -284,11 +284,13 @@ class OnlineScheme(BaseScheme):
             config=self.session_config,
         )
         self.sess.run(self.init_op, feed_dict=self.init_feed_dict)
+        tf.train.start_queue_runners(sess=self.sess)
 
 
 class ClassifyNet(ResNet50):
     VAR_SCOPE = 'classify_net'
     SUMMARY_ATTRS = ['loss', 'total_loss', 'accuracy']
+    OUTPUT_ATTRS = ['predictions', 'labels']
 
     def __init__(self,
                  num_classes,
@@ -299,6 +301,7 @@ class ClassifyNet(ResNet50):
                  scopes_to_restore=None,
                  scopes_to_freeze=None,
                  summary_attrs=None,
+                 output_attrs=None,
                  learning_rate=1.0,
                  learning_rate_decay_steps=None,
                  learning_rate_decay_rate=0.5,
@@ -326,46 +329,50 @@ class ClassifyNet(ResNet50):
         )
 
         self.num_classes = num_classes
+        self.output_attrs = output_attrs or ClassifyNet.OUTPUT_ATTRS
 
     def forward(self, blob):
         blob = super(ClassifyNet, self).forward(blob)
+        self.labels = blob['labels']
 
         with slim.arg_scope(self.arg_scope), tf.variable_scope(self.__var_scope):
-            feats = tf.reduce_mean(
+            self.feats = tf.reduce_mean(
                 blob['feat_maps'],
                 (1, 2),
                 keep_dims=True,
                 name='feats',
             )
-            logits = slim.conv2d(
-                feats,
+            self.logits = slim.conv2d(
+                self.feats,
                 self.num_classes,
                 (1, 1),
                 activation_fn=None,
                 normalizer_fn=None,
                 scope='logits',
             )
-            predictions = slim.softmax(
-                logits,
+            self.predictions = slim.softmax(
+                self.logits,
                 scope='predictions',
             )
 
-            predictions = tf.squeeze(predictions, (1, 2))
-            targets = tf.one_hot(blob['labels'], self.num_classes)
-            self.loss = slim.losses.log_loss(predictions, targets, weight=self.num_classes)
+            self.predictions = tf.squeeze(self.predictions, (1, 2))
+            self.targets = tf.one_hot(self.labels, self.num_classes)
+            self.loss = slim.losses.log_loss(self.predictions, self.targets, weight=self.num_classes)
             self.total_loss = slim.losses.get_total_loss()
 
-            predicted_labels = tf.argmax(predictions, 1)
-            self.accuracy = slim.metrics.accuracy(predicted_labels, blob['labels'])
+            self.predicted_labels = tf.argmax(self.predictions, 1)
+            self.accuracy = slim.metrics.accuracy(self.predicted_labels, blob['labels'])
 
-        return Blob(
-            predictions=predictions,
-        )
+        return Blob(**{
+            attr: self.__getattribute__(attr)
+            for attr in self.output_attrs
+        })
 
 
 class HashNet(ResNet50):
     VAR_SCOPE = 'hash_net'
-    SUMMARY_ATTRS = ['bandwidth', 'loss', 'total_loss']
+    SUMMARY_ATTRS = ['softness', 'bandwidth', 'loss', 'total_loss']
+    OUTPUT_ATTRS = ['hard_codes', 'label']
 
     def __init__(self,
                  num_bits,
@@ -376,9 +383,13 @@ class HashNet(ResNet50):
                  scopes_to_restore=None,
                  scopes_to_freeze=None,
                  summary_attrs=None,
+                 output_attrs=None,
                  learning_rate=1.0,
                  learning_rate_decay_steps=None,
                  learning_rate_decay_rate=0.5,
+                 softness=1.0,
+                 softness_decay_steps=None,
+                 softness_decay_rate=1,
                  gpu_frac=1.0,
                  log_device_placement=False,
                  verbosity=tf.logging.INFO):
@@ -403,74 +414,123 @@ class HashNet(ResNet50):
         )
 
         self.num_bits = num_bits
+        self.softness = softness
+        self.softness_decay_steps = softness_decay_steps
+        self.softness_decay_rate = softness_decay_rate
+        self.output_attrs = output_attrs or HashNet.OUTPUT_ATTRS
 
     def forward(self, blob):
         blob = super(HashNet, self).forward(blob)
+        self.labels = blob['labels']
 
         with slim.arg_scope(self.arg_scope), tf.variable_scope(self.__var_scope):
-            feats = tf.reduce_mean(
+            self.feats = tf.reduce_mean(
                 blob['feat_maps'],
                 (1, 2),
                 keep_dims=False,
                 name='feats',
             )
 
-            with tf.variable_scope('hash_code'):
-                ''' divide-and-encode
+            with tf.variable_scope('hash_codes'):
+                ''' Product Quantization Code
                 '''
                 feat_dim = feats.get_shape()[-1].value
                 weight = slim.model_variable(
                     'weight',
                     shape=(feat_dim,),
-                    initializer=slim.xavier_initializer(),
+                    initializer=slim.variance_scaling_initializer(),
                     collections=tf.GraphKeys.WEIGHTS,
                 )
+
+                net = tf.mul(self.feats, weight)
+                net = tf.reshape(
+                    net,
+                    (-1, feat_dim / self.num_bits, self.num_bits),
+                )
+                net = tf.reduce_sum(net, 1)
+
                 bias = slim.model_variable(
                     'bias',
                     shape=(self.num_bits,),
                     initializer=tf.constant_initializer(0.0),
                     collections=tf.GraphKeys.BIASES,
                 )
+                net = tf.tanh(tf.nn.bias_add(net, bias))
 
-                net = tf.mul(feats, weight)
-                net = tf.reshape(
-                    net,
-                    (-1, feat_dim / self.num_bits, self.num_bits),
-                )
-                net = tf.reduce_sum(net, 1)
-                net = tf.nn.bias_add(net, bias)
-
-                ''' learn by continuation
+                ''' Continuation
                 '''
-                hardness = tf.Variable(
-                    1.0,
-                    trainable=False,
+                self.softness = tf.constant(
+                    self.softness,
                     dtype=tf.float32,
+                    name='softness',
                 )
-                hash_code = tf.tanh(hardness * net)
+                if self.softness_decay_steps is not None:
+                    self.softness = tf.train.exponential_decay(
+                        self.softness,
+                        global_step=self.global_step,
+                        decay_steps=self.softness_decay_steps,
+                        decay_rate=self.softness_decay_rate,
+                        staircase=True,
+                        name='decaying_softness',
+                    )
 
-            ''' adaptive likelihood
-            '''
-            dists = tf.matmul(hash_code, tf.transpose(hash_code)) / tf.sqrt(tf.to_float(self.num_bits))
-            bandwidth = slim.model_variable(
+                net_abs = tf.abs(net)
+                net_sign = tf.sign(net)
+
+                self.soft_codes = tf.select(
+                    net_abs > self.softness,
+                    tf.ones_like(net),
+                    net_abs,
+                ) * net_sign
+
+                self.hard_codes = tf.cast(net_sign, tf.int8)
+
+            self.rels = tf.matmul(self.soft_codes, tf.transpose(self.soft_codes)) / self.num_bits
+            self.bandwidth = slim.model_variable(
                 'bandwidth',
                 shape=(),
                 initializer=tf.constant_initializer(1.0),
             )
-            prob = tf.sigmoid(dists / bandwidth)
+            self.probs = 1 / (tf.pow(2 / (1 + rels) - 1, self.bandwidth) + 1)
 
-            labels = tf.expand_dims(blob['labels'], 1)
-            targets = tf.not_equal(labels, tf.transpose(labels))
-            weights = tf.select(
-                targets,
-                tf.ones_like(targets) / tf.reduce_sum(targets),
-                tf.ones_like(targets) / tf.reduce_sum(tf.logical_not(targets)),
+            self.targets = tf.equal(tf.expand_dims(self.labels, 1), tf.transpose(labels))
+            self.weight = tf.select(
+                self.targets,
+                tf.ones_like(self.targets, dtype=tf.float32) / (2 * tf.reduce_mean(tf.to_float(self.targets))),
+                tf.ones_like(self.targets, dtype=tf.float32) / (2 * tf.reduce_mean(tf.to_float(tf.logical_not(self.targets)))),
             )
 
-            self.loss = slim.losses.log_loss(prob, targets, weights=weights)
+            self.loss = slim.losses.log_loss(self.probs, self.targets, weight=self.weight)
             self.total_loss = slim.losses.get_total_loss()
 
-        return Blob(
-            hash_code=hash_code,
-            prob=prob,
-        )
+            class Logger(object):
+                def __init__(self, dep, debug=False):
+                    self.dep = dep
+                    self.debug = debug
+
+                def Print(self, val, **kwargs):
+                    if self.debug:
+                        self.dep = tf.Print(
+                            self.dep,
+                            [val],
+                            **kwargs
+                        )
+                    return self.dep
+
+            logger = Logger(self.total_loss, debug=False)
+            logger.Print(self.softness, message='softness: ')
+            logger.Print(self.bandwidth, message='bandwidth: ')
+            for n in xrange(4):
+                logger.Print(self.soft_codes[n], message='soft_codes[{:d}]: '.format(n), summarize=256)
+                logger.Print(self.hard_codes[n], message='hard_codes[{:d}]: '.format(n), summarize=256)
+            for n in xrange(4):
+                logger.Print(self.rels[n], message='rels[{:d}]: '.format(n), summarize=64)
+                logger.Print(self.probs[n], message='probs[{:d}]: '.format(n), summarize=64)
+                logger.Print(self.targets[n], message='targets[{:d}]: '.format(n), summarize=64)
+
+            self.total_loss = logger.dep
+
+        return Blob(**{
+            attr: self.__getattribute__(attr)
+            for attr in self.output_attrs
+        })

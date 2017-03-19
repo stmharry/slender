@@ -5,11 +5,12 @@ import sys
 
 from slender.producer import LocalFileProducer as Producer
 from slender.processor import TestProcessor as Processor
-from slender.net import ClassifyNet, TestScheme
+from slender.net import HashNet, TestScheme
 from slender.util import latest_working_dir
 
 gflags.DEFINE_string('image_dir', None, 'Image directory')
 gflags.DEFINE_string('working_dir_root', None, 'Root working directory')
+gflags.DEFINE_integer('num_bits', 64, 'Number of bits')
 gflags.DEFINE_integer('batch_size', 16, 'Batch size')
 gflags.DEFINE_integer('subsample_ratio', 64, 'Training image subsample')
 gflags.DEFINE_integer('interval', 300, 'Evaluation interval')
@@ -18,7 +19,7 @@ gflags.DEFINE_float('gpu_frac', 1.0, 'Fraction of GPU used')
 FLAGS = gflags.FLAGS
 
 
-class Net(ClassifyNet, TestScheme):
+class Net(HashNet, TestScheme):
     pass
 
 if __name__ == '__main__':
@@ -35,7 +36,7 @@ if __name__ == '__main__':
     processor = Processor()
     net = Net(
         working_dir=working_dir,
-        num_classes=producer.num_classes,
+        num_bits=FLAGS.num_bits,
         gpu_frac=FLAGS.gpu_frac,
     )
 
