@@ -93,7 +93,7 @@ class LocalFileProducer(BaseProducer):
         )
 
         self.filenames_per_class = [[
-            os.path.join(file_dir, file_name)
+                os.path.join(file_dir, file_name)
                 for (file_dir, _, file_names) in os.walk(os.path.join(image_dir, class_name), followlinks=True)
                 for file_name in file_names
                 if not file_name.startswith('.')
@@ -163,16 +163,18 @@ class LocalFileProducer(BaseProducer):
                 [(file_names, labels)],
                 enqueue_many=True,
             )
-            filename_labels = [
-                filename_label_queue.dequeue()
-                for num_parallel in xrange(self.num_parallels)
-            ]
-            content_labels = [
-                (tf.read_file(filename_label[0]), filename_label[1])
-                for filename_label in filename_labels
-            ]
-            content_label_queue = BaseProducer.queue_join(content_labels)
-            (self.contents, self.labels) = content_label_queue.dequeue_many(self.batch_size)
+
+            filename_content_labels = []
+            for num_parallel in xrange(self.num_parallels):
+                (filename, label) = filename_label_queue.dequeue()
+                filename_content_labels.append([
+                    filename,
+                    tf.read_file(filename),
+                    label,
+                ])
+
+            filename_content_label_queue = BaseProducer.queue_join(filename_content_labels)
+            (self.filenames, self.contents, self.labels) = filename_content_label_queue.dequeue_many(self.batch_size)
 
         return Blob(contents=self.contents, labels=self.labels)
 
