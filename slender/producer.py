@@ -92,15 +92,22 @@ class LocalFileProducer(BaseProducer):
             batch_size=batch_size,
         )
 
-        self.filenames_per_class = [[
-                os.path.join(file_dir, file_name)
-                for (file_dir, _, file_names) in os.walk(os.path.join(image_dir, class_name), followlinks=True)
-                for file_name in file_names
-                if not file_name.startswith('.')
-                if subsample_fn(file_name)
-            ] for class_name in self.class_names
-        ]
-        self.num_files = sum(map(len, self.filenames_per_class))
+        self.filenames_by_subdir = {}
+        for subdir_name in os.listdir(image_dir):
+            self.filenames_by_subdir[subdir_name] = []
+
+            subdir_path = os.path.join(image_dir, subdir_name)
+            for (file_dir, _, file_names) in os.walk(subdir_path, followlinks=True):
+                for file_name in file_names:
+                    if file_name.startswith('.'):
+                        continue
+                    if not file_name.endswith('.jpg'):
+                        continue
+                    if not subsample_fn(file_name):
+                        continue
+                    self.filenames_by_subdir[subdir_name].append(os.path.join(file_dir, file_name))
+
+        self.num_files = sum(map(len, self.filenames_by_subdir))
         self.num_batches_per_epoch = self.num_files // self.batch_size
         self.num_parallels = num_parallels
         self.subsample_fn = subsample_fn
@@ -113,13 +120,13 @@ class LocalFileProducer(BaseProducer):
 
         sess = tf.Session()
 
-        for (num_class, (class_name, file_names)) in enumerate(zip(self.class_names, self.filenames_per_class)):
+        for (num_subdir, (subdir_name, file_names)) in enumerate(self.filenames_by_subdir.items()):
             file_names_ = []
             for (num_file, file_name) in enumerate(file_names):
-                print('Class {} ({}/{}), File {} ({}/{})'.format(
-                    class_name,
-                    num_class + 1,
-                    len(self.class_names),
+                print('Subdir {:s} ({:d}/{:d}), File {:s} ({:d}/{:d})'.format(
+                    subdir_name,
+                    num_subdir + 1,
+                    len(self.filenames_by_subdir),
                     file_name,
                     num_file + 1,
                     len(file_names),
@@ -137,25 +144,34 @@ class LocalFileProducer(BaseProducer):
 
             print('')
 
-            self.filenames_per_class[num_class] = file_names_
+            self.filenames_by_subdir[dir_name] = file_names_
 
     def blob(self):
         with tf.variable_scope(_('blob')):
-            # TODO: better mix_scheme
             if self.mix_scheme == LocalFileProducer.MixScheme.NONE:
-                (file_names, labels) = zip(*[
-                    (file_name, label)
-                    for (label, file_names) in enumerate(self.filenames_per_class)
-                    for file_name in file_names
-                ])
+                filename_labels = []
+                for (subdir_name, file_names) in self.filenames_by_subdir.items():
+                    if subdir_name in self.class_names:
+                        label = self.class_names.index(subdir_name)
+                    else:
+                        label = -1
+
+                    for file_name in file_names:
+                        filename_labels.append((file_name, label))
+
+                (file_names, labels) = zip(*filename_labels)
+
                 labels = tf.convert_to_tensor(labels, dtype=tf.int64)
                 file_names = tf.convert_to_tensor(file_names, dtype=tf.string)
 
             elif self.mix_scheme == LocalFileProducer.MixScheme.UNIFORM:
-                file_names = [
-                    tf.train.string_input_producer(file_names, name=class_name).dequeue()
-                    for (class_name, file_names) in zip(self.class_names, self.filenames_per_class)
-                ]
+                assert set(self.filenames_by_subdir.keys()) == set(self.class_names)
+
+                file_names = []
+                for (subdir_name, file_names_) in self.filenames_by_subdir.items():
+                    file_name_ = tf.train.string_input_producer(file_names_, name=subdir_name).dequeue()
+                    file_names.append(file_name_)
+
                 labels = tf.random_shuffle(tf.to_int64(tf.range(self.num_classes)))
                 file_names = tf.gather(tf.pack(file_names), labels)
 
