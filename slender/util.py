@@ -2,6 +2,8 @@ import os
 import tensorflow as tf
 import time
 
+from .blob import Blob
+
 
 def new_working_dir(working_dir_root):
     working_dir = os.path.join(working_dir_root, time.strftime('%Y-%m-%d-%H%M%S'))
@@ -24,6 +26,16 @@ def scope_join_fn(scope):
 def LOG(value, name=None, fn=tf.identity):
     value = tf.Print(value, [fn(value)], '{}: '.format(name or value.__name__))
     return value
+
+
+class ImageChecker(object):
+    def __init__(self):
+        pass
+
+    def blob(self):
+        self.content = tf.placeholder(tf.string, shape=())
+        image = tf.image.decode_jpeg(self.content, channels=3)
+        return Blob(image=image)
 
 
 class Timer(object):
