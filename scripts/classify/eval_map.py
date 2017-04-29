@@ -13,7 +13,6 @@ from slender.net import ClassifyNet, OnlineScheme
 gflags.DEFINE_string('image_dir', None, 'Image directory')
 gflags.DEFINE_string('working_dir', None, 'Working directory')
 gflags.DEFINE_string('output_path', None, 'Path for output results')
-gflags.DEFINE_integer('num_bits', 64, 'Number of bits')
 gflags.DEFINE_integer('batch_size', 16, 'Batch size')
 gflags.DEFINE_float('gpu_frac', 1.0, 'Fraction of GPU used')
 FLAGS = gflags.FLAGS

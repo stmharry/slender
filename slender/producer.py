@@ -107,7 +107,7 @@ class LocalFileProducer(BaseProducer):
                         continue
                     self.filenames_by_subdir[subdir_name].append(os.path.join(file_dir, file_name))
 
-        self.num_files = sum(map(len, self.filenames_by_subdir))
+        self.num_files = sum(map(len, self.filenames_by_subdir.values()))
         self.num_batches_per_epoch = self.num_files // self.batch_size
         self.num_parallels = num_parallels
         self.subsample_fn = subsample_fn
@@ -144,7 +144,7 @@ class LocalFileProducer(BaseProducer):
 
             print('')
 
-            self.filenames_by_subdir[dir_name] = file_names_
+            self.filenames_by_subdir[subdir_name] = file_names_
 
     def blob(self):
         with tf.variable_scope(_('blob')):

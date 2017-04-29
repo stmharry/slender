@@ -26,9 +26,10 @@ class SimpleTask(object):
             self._event.set()
         return flag
 
-    def eval(self, factory):
-        factory.queue.put(self)
-        self._event.wait()
+    def eval(self, factory, time=False):
+        if self.inputs:
+            factory.queue.put(self)
+            self._event.wait()
         return self.outputs
 
 
@@ -37,13 +38,14 @@ class BatchFactory(threading.Thread):
 
     SERVE_FOREVER = True
     QUEUE_SIZE = 1024
+    TIMEOUT = 0.001
 
     class TimeoutFunction(object):
         @staticmethod
         def CONSTANT(offset):
             def timeout_fn(size, batch_size):
                 if size == 0:
-                    return None
+                    return BatchFactory.TIMEOUT
                 else:
                     return offset
             return timeout_fn
@@ -52,7 +54,7 @@ class BatchFactory(threading.Thread):
         def QUARDRATIC(offset, delta):
             def timeout_fn(size, batch_size):
                 if size == 0:
-                    return None
+                    return BatchFactory.TIMEOUT
                 else:
                     return offset + delta * (1 - ((batch_size - 2 * float(size)) / batch_size) ** 2)
             return timeout_fn
@@ -64,10 +66,14 @@ class BatchFactory(threading.Thread):
 
         super(BatchFactory, self).__init__()
 
+        self._stop = threading.Event()
         self.tasks = []
         self.batch_size = batch_size
         self.queue = Queue.Queue(maxsize=queue_size)
         self.timeout_fn = timeout_fn
+
+    def stop(self):
+        self._stop.set()
 
     @abc.abstractmethod
     def run_one(self, inputs):
@@ -83,6 +89,9 @@ class BatchFactory(threading.Thread):
 
             # ... before retrieving new tasks
             while len(inputs) < self.batch_size:
+                if self._stop.is_set():
+                    return 0
+
                 try:
                     task = self.queue.get(timeout=self.timeout_fn(len(inputs), self.batch_size))
                 except Queue.Empty:
@@ -91,7 +100,22 @@ class BatchFactory(threading.Thread):
                     self.tasks.append(task)
                     inputs.extend(task.request_inputs(size=self.batch_size - len(inputs)))
 
-            outputs = self.run_one(inputs)
+            if len(inputs) == 0:
+                continue
+
+            try:
+                outputs = self.run_one(inputs)
+            # try one by one
+            except Exception as e:
+                print(e)
+                outputs = []
+                for input_ in inputs:
+                    try:
+                        output = self.run_one([input_])[0]
+                    except Exception:
+                        output = None
+
+                    outputs.append(output)
 
             # do not remove in-place, dangerous!
             tasks_ = []
