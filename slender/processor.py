@@ -290,7 +290,7 @@ class TrainProcessor(BaseProcessor):
 class TestProcessor(BaseProcessor):
     def __init__(self,
                  net_dim=None,
-                 shorter_dim=List([256, 512]),
+                 shorter_dim=List([256]),
                  aspect_ratio=List([1.0]),
                  num_duplicates=1,
                  batch_size=64):
