@@ -3,7 +3,7 @@ import threading
 import Queue
 
 
-class SimpleTask(object):
+class Task(object):
     __metaclass__ = abc.ABCMeta
 
     def __init__(self, inputs, task_id=None):
@@ -26,11 +26,16 @@ class SimpleTask(object):
             self._event.set()
         return flag
 
-    def eval(self, factory, time=False):
+    def eval(self, factory, block=True):
         if self.inputs:
             factory.queue.put(self)
-            self._event.wait()
-        return self.outputs
+            if block:
+                self._event.wait()
+                return self.outputs
+            else:
+                return None
+        else:
+            return []
 
 
 class BatchFactory(threading.Thread):
