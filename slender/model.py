@@ -111,8 +111,7 @@ class BatchFactory(threading.Thread):
             try:
                 outputs = self.run_one(inputs)
             # try one by one
-            except Exception as e:
-                print(e)
+            except Exception:
                 outputs = []
                 for input_ in inputs:
                     try:
