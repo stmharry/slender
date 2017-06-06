@@ -59,7 +59,7 @@ net.run(producer.num_batches_per_epoch)
 ```
 
 ## Serving models online with asynchronous workers
-```
+```python
 from slender.producer import PlaceholderProducer as Producer
 from slender.processor import List, TestProcessor as Processor
 from slender.net import ClassifyNet, OnlineScheme
