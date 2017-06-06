@@ -76,12 +76,11 @@ class Factory(BatchFactory):
         super(Factory, self).__init__()
 
         self.producer = Producer(
-            working_dir=working_dir,
-            batch_size=batch_size,
+            working_dir=WORKING_DIR,
         )
         self.processor = Processor()
         self.net = Net(
-            working_dir=working_dir,
+            working_dir=WORKING_DIR,
             num_classes=self.producer.num_classes,
         )
 
