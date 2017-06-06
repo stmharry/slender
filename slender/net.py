@@ -10,7 +10,7 @@ class BaseNet(object):
     IS_TRAINING = None  # set by scheme
 
     @staticmethod
-    def get_scope_set(scopes=None, collection=tf.GraphKeys.VARIABLES):
+    def get_scope_set(scopes=None, collection=tf.GraphKeys.GLOBAL_VARIABLES):
         scopes = scopes or ['']
         return set().union(*[
             slim.get_variables(scope, collection=collection)
@@ -153,7 +153,7 @@ class TrainScheme(BaseScheme):
 
     def prepare(self):
         self.summary_ops = [
-            tf.scalar_summary(
+            tf.summary.scalar(
                 scope_join_fn(TrainScheme.VAR_SCOPE)(attr),
                 self.__getattribute__(attr),
             )
@@ -191,7 +191,7 @@ class TrainScheme(BaseScheme):
             )
 
             all_vars = BaseNet.get_scope_set()
-            init_op = tf.initialize_variables(all_vars - vars_to_restore)
+            init_op = tf.variables_initializer(all_vars - vars_to_restore)
             (assign_op, assign_feed_dict) = slim.assign_from_checkpoint(
                 self.ckpt_path,
                 list(vars_to_restore),
@@ -237,7 +237,7 @@ class TestScheme(BaseScheme):
                 self.__setattr__(attr, value)
 
         self.summary_ops = [
-            tf.scalar_summary(
+            tf.summary.scalar(
                 scope_join_fn(TestScheme.VAR_SCOPE)(attr),
                 self.__getattribute__(attr),
             )
@@ -357,8 +357,8 @@ class ClassifyNet(ResNet50):
 
             self.predictions = tf.squeeze(self.predictions, (1, 2))
             self.targets = tf.one_hot(self.labels, self.num_classes)
-            self.loss = slim.losses.log_loss(self.predictions, self.targets, weight=self.num_classes)
-            self.total_loss = slim.losses.get_total_loss()
+            self.loss = tf.losses.log_loss(self.predictions, self.targets, weights=self.num_classes)
+            self.total_loss = tf.losses.get_total_loss()
 
             self.predicted_labels = tf.argmax(self.predictions, 1)
             self.accuracy = slim.metrics.accuracy(self.predicted_labels, blob['labels'])

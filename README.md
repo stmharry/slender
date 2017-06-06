@@ -1,4 +1,4 @@
-# Slender: A Wrapper around TensorFlow-Slim for Easy Model Training and Serving
+# Slender: A Wrapper around TensorFlow for Model Training and Serving
 
 ## Fast prototyping
 ```python
@@ -19,6 +19,7 @@ producer = Producer(
     image_dir=IMAGE_DIR,
     working_dir=WORKING_DIR,
     batch_size=BATCH_SIZE,
+    subsample_fn=TRAIN_SUBSAMPLE_FN,
 )
 processor = Processor()
 net = Net(
@@ -27,9 +28,9 @@ net = Net(
     learning_rate_decay_steps=NUM_DECAY_EPOCHS * producer.num_batches_per_epoch,
     gpu_frac=GPU_FRAC,
 )
-blob = producer.blob().func(processor.preprocess).func(net.forward)
+blob = producer.blob().f(processor.preprocess).f(net.build)
 
-net.eval(NUM_TRAIN_EPOCHS * producer.num_batches_per_epoch)
+net.run(NUM_TRAIN_EPOCHS * producer.num_batches_per_epoch)
 ```
 
 ## Easy evaluation
@@ -45,33 +46,52 @@ WORKING_DIR = latest_working_dir('/path/to/root/working/dir')
 producer = Producer(
     image_dir=IMAGE_DIR,
     working_dir=WORKING_DIR,
-    batch_size=BATCH_SIZE,
-    subsample_fn=SUBSAMPLE_FN,
+    subsample_fn=TEST_SUBSAMPLE_FN,
 )
 processor = Processor()
 net = Net(
     working_dir=WORKING_DIR,
     num_classes=producer.num_classes,
-    gpu_frac=GPU_FRAC,
 )
-blob = producer.blob().func(processor.preprocess).func(net.forward)
+blob = producer.blob().f(processor.preprocess).f(net.build)
 
-net.eval(producer.num_batches_per_epoch)
+net.run(producer.num_batches_per_epoch)
 ```
 
-## Image integrity checking
-```python
-from slender.producer import LocalFileProducer as Producer
-
-producer = Producer(
-    image_dir=IMAGE_DIR,
-    working_dir=WORKING_DIR,
-)
-
-producer.check()
+## Serving models online with asynchronous workers
 ```
+from slender.producer import PlaceholderProducer as Producer
+from slender.processor import List, TestProcessor as Processor
+from slender.net import ClassifyNet, OnlineScheme
+from slender.model import BatchFactory
 
-## Serving models online
-```
-Please refer to scripts/classify/service.py for now since I am too lazy ...
+class Net(ClassifyNet, OnlineScheme):
+    pass
+
+
+class Factory(BatchFactory):
+    def __init__(self)
+        super(Factory, self).__init__()
+
+        self.producer = Producer(
+            working_dir=working_dir,
+            batch_size=batch_size,
+        )
+        self.processor = Processor()
+        self.net = Net(
+            working_dir=working_dir,
+            num_classes=self.producer.num_classes,
+        )
+
+        self.blob = (
+            self.producer.blob()
+            .f(self.processor.preprocess)
+            .f(self.net.build)
+            .f(self.processor.postprocess)
+        )
+        self.net.run()
+        self.start()
+
+    def run_one(self, inputs):
+        return your_awesome_service(inputs)
 ```

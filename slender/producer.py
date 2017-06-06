@@ -144,7 +144,7 @@ class LocalFileProducer(BaseProducer):
                     file_names.append(file_name_)
 
                 labels = tf.random_shuffle(tf.to_int64(tf.range(self.num_classes)))
-                file_names = tf.gather(tf.pack(file_names), labels)
+                file_names = tf.gather(tf.stack(file_names), labels)
 
             filename_label_queue = BaseProducer.queue_join(
                 [(file_names, labels)],

@@ -283,7 +283,7 @@ class TrainProcessor(BaseProcessor):
         images = self.random_crop(images)
         images = self.random_flip(images)
         images = self.adjust(images)
-        image = tf.pack(images)
+        image = tf.stack(images)
         return image
 
 
@@ -308,7 +308,7 @@ class TestProcessor(BaseProcessor):
         images = self.mean_subtraction(images)
         images = self.resize(images)
         images = self.central_crop_or_pad(images)
-        image = tf.pack(images)
+        image = tf.stack(images)
         return image
 
 
@@ -326,7 +326,7 @@ class SimpleProcessor(BaseProcessor):
         images = [BaseProcessor._decode(content)] * self.num_duplicates
         images = self.mean_subtraction(images)
         images = self.set_shape(images)
-        image = tf.pack(images)
+        image = tf.stack(images)
         return image
 
 
@@ -348,5 +348,5 @@ class DebugProcessor(BaseProcessor):
         images = [BaseProcessor._decode(content)] * self.num_duplicates
         images = self.resize(images)
         images = self.central_crop_or_pad(images)
-        image = tf.pack(images)
+        image = tf.stack(images)
         return image
