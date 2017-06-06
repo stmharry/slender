@@ -1,4 +1,4 @@
-# Slender: A Wrapper around TensorFlow for Model Training and Serving
+# Slender
 
 ## Fast prototyping
 ```python
