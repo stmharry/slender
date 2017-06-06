@@ -4,7 +4,7 @@
 ```python
 from slender.producer import LocalFileProducer as Producer
 from slender.processor import TrainProcessor as Processor
-from slender.net import TrainNet as Net
+from slender.net import ClassifyNet, TrainScheme
 from slender.util import new_working_dir
 
 IMAGE_DIR = '/path/to/image/dir/that/contains/class_names/as/subdirectories/'
@@ -14,6 +14,9 @@ BATCH_SIZE = awesomeness_of_your_gpu
 GPU_FRAC = between_zero_and_one__but_leave_some_gpu_for_evaluation
 NUM_TRAIN_EPOCHS = your_patience__make_sure_not_too_small
 NUM_DECAY_EPOCHS = one_ish__make_sure_not_too_small_as_well
+
+class Net(ClassifyNet, TrainScheme):
+    pass
 
 producer = Producer(
     image_dir=IMAGE_DIR,
@@ -37,11 +40,11 @@ net.run(NUM_TRAIN_EPOCHS * producer.num_batches_per_epoch)
 ```python
 from slender.producer import LocalFileProducer as Producer
 from slender.processor import TestProcessor as Processor
-from slender.net import TestNet as Net
+from slender.net import ClassifyNet, TestScheme
 from slender.util import latest_working_dir
 
-IMAGE_DIR = '/path/to/image/dir/that/contains/class_names/as/subdirectories/'
-WORKING_DIR = latest_working_dir('/path/to/root/working/dir')
+class Net(ClassifyNet, TestScheme):
+    pass
 
 producer = Producer(
     image_dir=IMAGE_DIR,
@@ -58,7 +61,7 @@ blob = producer.blob().f(processor.preprocess).f(net.build)
 net.run(producer.num_batches_per_epoch)
 ```
 
-## Serving models online with asynchronous workers
+## Quick model deployment
 ```python
 from slender.producer import PlaceholderProducer as Producer
 from slender.processor import List, TestProcessor as Processor
@@ -67,7 +70,6 @@ from slender.model import BatchFactory
 
 class Net(ClassifyNet, OnlineScheme):
     pass
-
 
 class Factory(BatchFactory):
     def __init__(self)
