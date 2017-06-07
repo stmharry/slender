@@ -270,8 +270,13 @@ class OnlineScheme(BaseScheme):
     def prepare(self):
         with tf.variable_scope(OnlineScheme.VAR_SCOPE):
             vars_to_restore = BaseNet.get_scope_set()
+            if working_dir is None:
+                ckpt_path = tf.train.latest_checkpoint(TrainScheme.get_working_dir(self.working_dir))
+            else:
+                ckpt_path = self.ckpt_path
+
             (assign_op, assign_feed_dict) = slim.assign_from_checkpoint(
-                tf.train.latest_checkpoint(TrainScheme.get_working_dir(self.working_dir)),
+                ckpt_path,
                 list(vars_to_restore),
             )
 
