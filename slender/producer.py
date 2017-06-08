@@ -2,7 +2,6 @@ from __future__ import print_function
 
 import numpy as np
 import os
-import sys
 import tensorflow as tf
 
 from .blob import Blob
@@ -12,7 +11,7 @@ _ = scope_join_fn('producer')
 
 
 class BaseProducer(object):
-    _CLASSNAME_NAME = 'class_names.txt'
+    _CLASS_NAME_FILE_NAME = 'class_names.txt'
     _BUFFER_CAPACITY = 256
 
     @staticmethod
@@ -48,7 +47,7 @@ class BaseProducer(object):
         self.batch_size = batch_size
 
         if working_dir is not None:
-            self.classname_path = os.path.join(working_dir, BaseProducer._CLASSNAME_NAME)
+            self.classname_path = os.path.join(working_dir, BaseProducer._CLASS_NAME_FILE_NAME)
             if os.path.isfile(self.classname_path):
                 self.class_names = np.loadtxt(self.classname_path, dtype=np.str)
             else:
