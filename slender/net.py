@@ -187,7 +187,7 @@ class TrainScheme(BaseScheme):
             self.train_op = slim.learning.create_train_op(
                 self.total_loss,
                 optimizer,
-                variables_to_train=vars_to_train,
+                variables_to_train=list(vars_to_train),
             )
 
             all_vars = BaseNet.get_scope_set()
