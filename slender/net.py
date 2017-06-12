@@ -358,7 +358,7 @@ class ClassifyNet(ResNet50):
 
             self.predictions = tf.squeeze(self.predictions, (1, 2))
             self.targets = tf.one_hot(self.labels, self.num_classes)
-            self.loss = tf.losses.log_loss(self.predictions, self.targets, weights=self.num_classes)
+            self.loss = tf.losses.log_loss(labels=self.targets, predictions=self.predictions)
             self.total_loss = tf.losses.get_total_loss()
 
             self.predicted_labels = tf.argmax(self.predictions, 1)
