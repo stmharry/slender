@@ -1,3 +1,5 @@
+# -*- encoding: utf-8 -*-
+
 import os
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
@@ -39,7 +41,7 @@ class BaseNet(object):
         self.learning_rate_decay_steps = learning_rate_decay_steps
         self.learning_rate_decay_rate = learning_rate_decay_rate
 
-        self.global_step = slim.get_or_create_global_step()
+        self.global_step = tf.train.get_or_create_global_step()
         self.session_config = tf.ConfigProto(
             gpu_options=tf.GPUOptions(per_process_gpu_memory_fraction=gpu_frac),
             log_device_placement=log_device_placement,
@@ -334,11 +336,12 @@ class ClassifyNet(ResNet50):
 
     def forward(self, blob):
         blob = super(ClassifyNet, self).forward(blob)
+        self.feat_maps = blob['feat_maps']
         self.labels = blob['labels']
 
         with slim.arg_scope(self.arg_scope), tf.variable_scope(self.__var_scope):
             self.feats = tf.reduce_mean(
-                blob['feat_maps'],
+                self.feat_maps,
                 (1, 2),
                 keep_dims=True,
                 name='feats',
@@ -351,18 +354,36 @@ class ClassifyNet(ResNet50):
                 normalizer_fn=None,
                 scope='logits',
             )
-            self.predictions = slim.softmax(
+            self.logits = tf.squeeze(
                 self.logits,
-                scope='predictions',
+                axis=(1, 2),
+            )
+            self.predictions = tf.nn.softmax(
+                self.logits,
+                name='predictions',
             )
 
-            self.predictions = tf.squeeze(self.predictions, (1, 2))
+            # '''
+            self.loss = tf.losses.sparse_softmax_cross_entropy(
+                labels=self.labels,
+                logits=self.logits,
+                scope='loss',
+            )
+            '''
             self.targets = tf.one_hot(self.labels, self.num_classes)
-            self.loss = tf.losses.log_loss(labels=self.targets, predictions=self.predictions)
+            self.loss = tf.losses.log_loss(
+                labels=self.targets,
+                predictions=self.predictions,
+                weights=self.num_classes,
+            )
+            '''
             self.total_loss = tf.losses.get_total_loss()
 
             self.predicted_labels = tf.argmax(self.predictions, 1)
-            self.accuracy = slim.metrics.accuracy(self.predicted_labels, blob['labels'])
+            self.accuracy = slim.metrics.accuracy(
+                labels=self.labels,
+                predictions=self.predicted_labels,
+            )
 
         return Blob(**{
             attr: self.__getattribute__(attr)
