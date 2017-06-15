@@ -138,8 +138,9 @@ class LocalFileProducer(BaseProducer):
                 assert set(self.filenames_by_subdir.keys()) == set(self.class_names)
 
                 file_names = []
-                for (subdir_name, file_names_) in self.filenames_by_subdir.items():
-                    file_name_ = tf.train.string_input_producer(file_names_, name=subdir_name).dequeue()
+                for class_name in self.class_names:
+                    file_names_ = self.filenames_by_subdir[class_name]
+                    file_name_ = tf.train.string_input_producer(file_names_, name=class_name).dequeue()
                     file_names.append(file_name_)
 
                 labels = tf.random_shuffle(tf.to_int64(tf.range(self.num_classes)))
