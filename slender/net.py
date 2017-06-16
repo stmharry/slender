@@ -363,11 +363,26 @@ class ClassifyNet(ResNet50):
                 self.logits,
                 name='predictions',
             )
-            self.loss = tf.losses.sparse_softmax_cross_entropy(
-                labels=self.labels,
-                logits=self.logits,
-                scope='loss',
-            )
+
+            from . import Config, Loss
+            if Config.LOSS == Loss.CROSS_ENTROPY:
+                self.loss = tf.losses.sparse_softmax_cross_entropy(
+                    labels=self.labels,
+                    logits=self.logits,
+                    scope='loss',
+                )
+            elif Config.LOSS == Loss.LOG:
+                self.targets = tf.one_hot(
+                    self.labels,
+                    depth=self.num_classes,
+                )
+                self.loss = tf.losses.log_loss(
+                    labels=self.targets,
+                    predictions = self.predictions,
+                    weights=self.num_classes,
+                    scope='loss',
+                )
+
             self.total_loss = tf.losses.get_total_loss()
 
             self.predicted_labels = tf.argmax(self.predictions, 1)
