@@ -1,7 +1,7 @@
-class Loss(object):
-    CROSS_ENTROPY = 1
-    LOG = 2
+class Switch:
+    OLD = 0
+    NEW = 1
 
 
-class Config(object):
-    LOSS = Loss.LOG
+class Config:
+    pass
