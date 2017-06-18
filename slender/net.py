@@ -105,9 +105,6 @@ class ResNet50(BaseNet):
         self.__var_scope = scope_join_fn(scope)(ResNet50.VAR_SCOPE)
         self.__scope_join = scope_join_fn(self.__var_scope)
 
-        _scopes_to_restore = map(self.__scope_join, ResNet50.SCOPES_TO_RESTORE)
-        _scopes_to_freeze = map(self.__scope_join, ResNet50.SCOPES_TO_FREEZE)
-
         self.arg_scope = self.__net.resnet_arg_scope(
             is_training=self.IS_TRAINING,
             weight_decay=weight_decay,
@@ -116,8 +113,8 @@ class ResNet50(BaseNet):
         super(ResNet50, self).__init__(
             working_dir,
             ckpt_path=ckpt_path or ResNet50.CKPT_PATH,
-            scopes_to_restore=scopes_to_restore or _scopes_to_restore,
-            scopes_to_freeze=scopes_to_freeze or _scopes_to_freeze,
+            scopes_to_restore=map(self.__scope_join, scopes_to_restore or ResNet50.SCOPES_TO_RESTORE),
+            scopes_to_freeze=map(self.__scope_join, scopes_to_freeze or ResNet50.SCOPES_TO_FREEZE),
             summary_attrs=summary_attrs or ResNet50.SUMMARY_ATTRS,
             learning_rate=learning_rate,
             learning_rate_decay_steps=learning_rate_decay_steps,
