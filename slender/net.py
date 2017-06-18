@@ -201,7 +201,10 @@ class TrainScheme(BaseScheme):
 
             self.init_op = tf.group(assign_op, init_op)
             self.init_feed_dict = assign_feed_dict
-            self.saver = tf.train.Saver(all_model_vars)
+            self.saver = tf.train.Saver(
+                var_list=all_model_vars,
+                save_relative_paths=True,
+            )
 
     def run(self,
             number_of_steps,
