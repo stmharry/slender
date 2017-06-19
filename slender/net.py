@@ -46,7 +46,6 @@ class BaseNet(object):
             gpu_options=tf.GPUOptions(per_process_gpu_memory_fraction=gpu_frac),
             log_device_placement=log_device_placement,
         )
-        self.graph = tf.get_default_graph()
 
         tf.logging.set_verbosity(verbosity)
 
@@ -284,9 +283,9 @@ class OnlineScheme(BaseScheme):
             self.init_op = assign_op
             self.init_feed_dict = assign_feed_dict
 
-    def run(self):
+    def run(self, graph=None):
         self.sess = tf.Session(
-            graph=self.graph,
+            graph=graph or tf.get_default_graph(),
             config=self.session_config,
         )
         self.sess.run(self.init_op, feed_dict=self.init_feed_dict)

@@ -2,9 +2,6 @@ FROM nvidia/cuda:8.0-cudnn6-devel-ubuntu16.04
 
 MAINTAINER Tzu Ming Hsu <stmharry@mit.edu>
 
-ENV BAZEL_VERSION=0.5.0 \
-    TF_BRANCH=r1.2
-
 RUN apt-get update && apt-get install -y --no-install-recommends \
         apache2 \
         apache2-dev \
@@ -29,7 +26,9 @@ RUN curl -L https://github.com/bazelbuild/bazel/releases/download/$BAZEL_VERSION
     rm bazel-installer.sh
 
 # TENSORFLOW
-ENV TF_ENABLE_XLA=1 \
+ENV BAZEL_VERSION=0.5.0 \
+    TF_BRANCH=r1.2 \
+    TF_ENABLE_XLA=1 \
     TF_NEED_CUDA=1 \
     TF_CUDA_COMPUTE_CAPABILITIES=3.0,3.5,5.2,6.0,6.1 \
     TF_CUDNN_VERSION=6 \
