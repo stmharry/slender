@@ -106,7 +106,6 @@ class ResNet50(BaseNet):
         self.__scope_join = scope_join_fn(self.__var_scope)
 
         self.arg_scope = self.__net.resnet_arg_scope(
-            is_training=self.IS_TRAINING,
             weight_decay=weight_decay,
         )
 
@@ -128,6 +127,7 @@ class ResNet50(BaseNet):
         with slim.arg_scope(self.arg_scope):
             (feat_maps, _) = self.__net.resnet_v1_50(
                 blob['images'],
+                is_training=self.IS_TRAINING,
                 global_pool=False,
                 scope=self.__var_scope,
             )
@@ -138,7 +138,7 @@ class ResNet50(BaseNet):
         )
 
 
-class BaseScheme(object):
+class BaseScheme(BaseNet):
     VAR_SCOPE = None
 
     @classmethod
