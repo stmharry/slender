@@ -20,14 +20,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/*
 
 RUN curl https://bootstrap.pypa.io/get-pip.py | python
+
+# BAZEL
+ENV BAZEL_VERSION=0.5.0
+
 RUN curl -L https://github.com/bazelbuild/bazel/releases/download/$BAZEL_VERSION/bazel-$BAZEL_VERSION-installer-linux-x86_64.sh -o bazel-installer.sh && \
     chmod +x bazel-installer.sh && \
     ./bazel-installer.sh && \
     rm bazel-installer.sh
 
 # TENSORFLOW
-ENV BAZEL_VERSION=0.5.0 \
-    TF_BRANCH=r1.2 \
+ENV TF_BRANCH=r1.2 \
     TF_ENABLE_XLA=1 \
     TF_NEED_CUDA=1 \
     TF_CUDA_COMPUTE_CAPABILITIES=3.0,3.5,5.2,6.0,6.1 \

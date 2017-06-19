@@ -285,7 +285,7 @@ class OnlineScheme(BaseScheme):
 
     def run(self, graph=None):
         self.sess = tf.Session(
-            graph=graph or tf.get_default_graph(),
+            graph=graph,
             config=self.session_config,
         )
         self.sess.run(self.init_op, feed_dict=self.init_feed_dict)
