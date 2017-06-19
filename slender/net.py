@@ -24,7 +24,7 @@ class BaseNet(object):
                  ckpt_path,
                  scopes_to_restore,
                  scopes_to_freeze,
-                 summary_attrs,
+                 summary_scalar_attrs,
                  learning_rate=1.0,
                  learning_rate_decay_steps=None,
                  learning_rate_decay_rate=0.5,
@@ -36,7 +36,7 @@ class BaseNet(object):
         self.ckpt_path = ckpt_path
         self.scopes_to_restore = scopes_to_restore
         self.scopes_to_freeze = scopes_to_freeze
-        self.summary_attrs = summary_attrs
+        self.summary_scalar_attrs = summary_scalar_attrs
         self.learning_rate = learning_rate
         self.learning_rate_decay_steps = learning_rate_decay_steps
         self.learning_rate_decay_rate = learning_rate_decay_rate
@@ -81,7 +81,7 @@ class ResNet50(BaseNet):
         'block1',
         'block2',
     ]
-    SUMMARY_ATTRS = []
+    SUMMARY_SCALAR_ATTRS = []
 
     def __init__(self,
                  working_dir=None,
@@ -90,7 +90,7 @@ class ResNet50(BaseNet):
                  scope=None,
                  scopes_to_restore=None,
                  scopes_to_freeze=None,
-                 summary_attrs=None,
+                 summary_scalar_attrs=None,
                  learning_rate=1.0,
                  learning_rate_decay_steps=None,
                  learning_rate_decay_rate=0.5,
@@ -115,7 +115,7 @@ class ResNet50(BaseNet):
             ckpt_path=ckpt_path or ResNet50.CKPT_PATH,
             scopes_to_restore=map(self.__scope_join, scopes_to_restore or ResNet50.SCOPES_TO_RESTORE),
             scopes_to_freeze=map(self.__scope_join, scopes_to_freeze or ResNet50.SCOPES_TO_FREEZE),
-            summary_attrs=summary_attrs or ResNet50.SUMMARY_ATTRS,
+            summary_scalar_attrs=summary_scalar_attrs or ResNet50.SUMMARY_SCALAR_ATTRS,
             learning_rate=learning_rate,
             learning_rate_decay_steps=learning_rate_decay_steps,
             learning_rate_decay_rate=learning_rate_decay_rate,
@@ -138,7 +138,7 @@ class ResNet50(BaseNet):
         )
 
 
-class BaseScheme(BaseNet):
+class BaseScheme(object):
     VAR_SCOPE = None
 
     @classmethod
@@ -149,15 +149,16 @@ class BaseScheme(BaseNet):
 class TrainScheme(BaseScheme):
     VAR_SCOPE = 'train'
     IS_TRAINING = True
+    SUMMARY_SCALAR_ATTRS = ['learning_rate']
 
     def prepare(self):
-        self.summary_ops = [
-            tf.summary.scalar(
+        self.summary_ops = []
+        for attr in self.summary_scalar_attrs + TrainScheme.SUMMARY_SCALAR_ATTRS:
+            summary_op = tf.summary.scalar(
                 scope_join_fn(TrainScheme.VAR_SCOPE)(attr),
                 self.__getattribute__(attr),
             )
-            for attr in self.summary_attrs
-        ]
+            self.summary_ops.append(summary_op)
 
         with tf.variable_scope(TrainScheme.VAR_SCOPE):
             all_model_vars = BaseNet.get_scope_set()
@@ -226,25 +227,27 @@ class TrainScheme(BaseScheme):
 class TestScheme(BaseScheme):
     VAR_SCOPE = 'test'
     IS_TRAINING = False
+    SUMMARY_SCALAR_ATTRS = []
 
     def prepare(self):
         with tf.variable_scope(TestScheme.VAR_SCOPE):
             (values, update_ops) = slim.metrics.aggregate_metrics(*[
                 slim.metrics.streaming_mean(self.__getattribute__(attr))
-                for attr in self.summary_attrs
+                for attr in self.summary_scalar_attrs
             ])
             self.eval_op = tf.group(*update_ops)
 
-            for (attr, value) in zip(self.summary_attrs, values):
+            for (attr, value) in zip(self.summary_scalar_attrs, values):
                 self.__setattr__(attr, value)
 
-        self.summary_ops = [
-            tf.summary.scalar(
+        self.summary_ops = []
+        for attr in self.summary_scalar_attrs + TestScheme.SUMMARY_SCALAR_ATTRS:
+            summary_op = tf.summary.scalar(
                 scope_join_fn(TestScheme.VAR_SCOPE)(attr),
                 self.__getattribute__(attr),
             )
-            for attr in self.summary_attrs
-        ]
+            self.summary_ops.append(summary_op)
+
         self.all_model_vars = BaseNet.get_scope_set()
 
     def run(self,
@@ -292,7 +295,7 @@ class OnlineScheme(BaseScheme):
 
 class ClassifyNet(ResNet50):
     VAR_SCOPE = 'classify_net'
-    SUMMARY_ATTRS = ['loss', 'total_loss', 'accuracy']
+    SUMMARY_SCALAR_ATTRS = ['loss', 'total_loss', 'accuracy']
     OUTPUT_ATTRS = ['predictions', 'labels']
 
     def __init__(self,
@@ -303,7 +306,7 @@ class ClassifyNet(ResNet50):
                  scope=None,
                  scopes_to_restore=None,
                  scopes_to_freeze=None,
-                 summary_attrs=None,
+                 summary_scalar_attrs=None,
                  output_attrs=None,
                  learning_rate=1.0,
                  learning_rate_decay_steps=None,
@@ -322,7 +325,7 @@ class ClassifyNet(ResNet50):
             scope=self.__var_scope,
             scopes_to_restore=scopes_to_restore,
             scopes_to_freeze=scopes_to_freeze,
-            summary_attrs=summary_attrs or ClassifyNet.SUMMARY_ATTRS,
+            summary_scalar_attrs=summary_scalar_attrs or ClassifyNet.SUMMARY_SCALAR_ATTRS,
             learning_rate=learning_rate,
             learning_rate_decay_steps=learning_rate_decay_steps,
             learning_rate_decay_rate=learning_rate_decay_rate,
