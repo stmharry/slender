@@ -1,5 +1,6 @@
 import abc
 import itertools
+import math
 import tensorflow as tf
 
 from .blob import Blob
@@ -47,13 +48,6 @@ class BaseProcessor(object):
     _MEAN = [123.68, 116.78, 103.94]
 
     @staticmethod
-    def _decode(content):
-        image = tf.image.decode_jpeg(content, channels=3)
-        image.set_shape((None, None, 3))
-        image = tf.to_float(image)
-        return image
-
-    @staticmethod
     def _height_and_width(image):
         shape = tf.shape(image)
         return (shape[0], shape[1])
@@ -61,6 +55,13 @@ class BaseProcessor(object):
     @staticmethod
     def _set_shape(image, shape):
         image.set_shape(shape)
+        return image
+
+    @staticmethod
+    def _decode_jpeg(content):
+        image = tf.image.decode_jpeg(content, channels=3)
+        image.set_shape((None, None, 3))
+        image = tf.to_float(image)
         return image
 
     @staticmethod
@@ -141,6 +142,16 @@ class BaseProcessor(object):
         return image
 
     @staticmethod
+    def _rotate(image, angle):
+        image = tf.contrib.image.rotate(image, angle=angle)
+        return image
+
+    @staticmethod
+    def _random_rotate(image):
+        angle = tf.random_uniform((), maxval=2 * math.pi, dtype=tf.float32)
+        return BaseProcessor._rotate(image, angle)
+
+    @staticmethod
     def _random_flip(image):
         image = tf.image.random_flip_left_right(image)
         return image
@@ -160,21 +171,16 @@ class BaseProcessor(object):
 
     def __init__(self,
                  net_dim,
-                 shorter_dim=None,
-                 aspect_ratio=None,
-                 delta=None,
-                 contrast=None,
                  num_duplicates=1,
                  batch_size=64):
 
         self.net_dim = net_dim
         self.shape = (net_dim, net_dim, 3)
-        self.shorter_dim = shorter_dim
-        self.aspect_ratio = aspect_ratio
-        self.delta = delta
-        self.contrast = contrast
         self.num_duplicates = num_duplicates
         self.batch_size = batch_size
+
+    def decode_jpeg(self, content):
+        return [BaseProcessor._decode_jpeg(content)] * self.num_duplicates
 
     def set_shape(self, images):
         return BaseProcessor._apply(BaseProcessor._set_shape, {
@@ -187,11 +193,11 @@ class BaseProcessor(object):
             'image': images,
         })
 
-    def resize(self, images):
+    def resize(self, images, shorter_dim, aspect_ratio):
         return BaseProcessor._apply(BaseProcessor._resize, {
             'image': images,
-            'shorter_dim': self.shorter_dim.get(),
-            'aspect_ratio': self.aspect_ratio.get(),
+            'shorter_dim': shorter_dim.get(),
+            'aspect_ratio': aspect_ratio.get(),
         })
 
     def random_crop(self, images):
@@ -208,21 +214,32 @@ class BaseProcessor(object):
             'target_width': [self.net_dim],
         })
 
+    def random_rotate(self, images):
+        return BaseProcessor._apply(BaseProcessor._random_rotate, {
+            'image': images,
+        })
+
     def random_flip(self, images):
         return BaseProcessor._apply(BaseProcessor._random_flip, {
             'image': images,
         })
 
-    def adjust(self, images):
+    def adjust(self, images, delta, contrast):
         return BaseProcessor._apply(BaseProcessor._adjust, {
             'image': images,
-            'delta': self.delta.get(),
-            'contrast': self.contrast.get(),
+            'delta': delta.get(),
+            'contrast': contrast.get(),
         })
 
     @abc.abstractmethod
-    def preprocess_single(self, content):
+    def preprocess_images(self, images):
         pass
+
+    def preprocess_single(self, content):
+        images = self.decode_jpeg(content)
+        images = self.preprocess_images(images)
+        images = tf.stack(images)
+        return images
 
     def preprocess(self, blob):
         with tf.variable_scope(_('preprocess')):
@@ -254,99 +271,3 @@ class BaseProcessor(object):
                 setattr(self, key, value)
 
         return Blob(**blob_dict)
-
-
-class TrainProcessor(BaseProcessor):
-    def __init__(self,
-                 net_dim=224,
-                 shorter_dim=Range((256, 512)),
-                 aspect_ratio=Range((0.5, 2.0)),
-                 delta=Range((-64, 64)),
-                 contrast=Range((0.5, 1.5)),
-                 num_duplicates=1,
-                 batch_size=64):
-
-        super(TrainProcessor, self).__init__(
-            net_dim=net_dim,
-            shorter_dim=shorter_dim,
-            aspect_ratio=aspect_ratio,
-            delta=delta,
-            contrast=contrast,
-            num_duplicates=num_duplicates,
-            batch_size=batch_size,
-        )
-
-    def preprocess_single(self, content):
-        images = [BaseProcessor._decode(content)] * self.num_duplicates
-        images = self.mean_subtraction(images)
-        images = self.resize(images)
-        images = self.random_crop(images)
-        images = self.random_flip(images)
-        images = self.adjust(images)
-        image = tf.stack(images)
-        return image
-
-
-class TestProcessor(BaseProcessor):
-    def __init__(self,
-                 net_dim=None,
-                 shorter_dim=List([256]),
-                 aspect_ratio=List([1.0]),
-                 num_duplicates=1,
-                 batch_size=64):
-
-        super(TestProcessor, self).__init__(
-            net_dim=net_dim or min(shorter_dim.val_list),
-            shorter_dim=shorter_dim,
-            aspect_ratio=aspect_ratio,
-            num_duplicates=num_duplicates,
-            batch_size=batch_size,
-        )
-
-    def preprocess_single(self, content):
-        images = [BaseProcessor._decode(content)] * self.num_duplicates
-        images = self.mean_subtraction(images)
-        images = self.resize(images)
-        images = self.central_crop_or_pad(images)
-        image = tf.stack(images)
-        return image
-
-
-class SimpleProcessor(BaseProcessor):
-    def __init__(self,
-                 net_dim,
-                 batch_size=64):
-
-        super(SimpleProcessor, self).__init__(
-            net_dim=net_dim,
-            batch_size=batch_size,
-        )
-
-    def preprocess_single(self, content):
-        images = [BaseProcessor._decode(content)] * self.num_duplicates
-        images = self.mean_subtraction(images)
-        images = self.set_shape(images)
-        image = tf.stack(images)
-        return image
-
-
-class DebugProcessor(BaseProcessor):
-    def __init__(self,
-                 net_dim=None,
-                 shorter_dim=List([256]),
-                 aspect_ratio=List([1.0]),
-                 batch_size=64):
-
-        super(DebugProcessor, self).__init__(
-            net_dim=net_dim or max(shorter_dim.val_list),
-            shorter_dim=shorter_dim,
-            aspect_ratio=aspect_ratio,
-            batch_size=batch_size,
-        )
-
-    def preprocess_single(self, content):
-        images = [BaseProcessor._decode(content)] * self.num_duplicates
-        images = self.resize(images)
-        images = self.central_crop_or_pad(images)
-        image = tf.stack(images)
-        return image
