@@ -204,7 +204,7 @@ class TrainScheme(BaseScheme):
             )
 
     def run(self,
-            number_of_steps,
+            num_steps,
             log_every_n_steps=1,
             save_summaries_secs=10,
             save_interval_secs=600):
@@ -213,7 +213,7 @@ class TrainScheme(BaseScheme):
             train_op=self.train_op,
             logdir=TrainScheme.get_working_dir(self.working_dir),
             log_every_n_steps=log_every_n_steps,
-            number_of_steps=number_of_steps,
+            number_of_steps=num_steps,
             init_op=self.init_op,
             init_feed_dict=self.init_feed_dict,
             save_summaries_secs=save_summaries_secs,
@@ -251,7 +251,7 @@ class TestScheme(BaseScheme):
 
     def run(self,
             num_steps,
-            eval_interval_secs=300,
+            interval=300,
             timeout=600):
 
         slim.evaluation.evaluation_loop(
@@ -260,7 +260,7 @@ class TestScheme(BaseScheme):
             logdir=TestScheme.get_working_dir(self.working_dir),
             num_evals=num_steps,
             eval_op=self.eval_op,
-            eval_interval_secs=eval_interval_secs,
+            eval_interval_secs=interval,
             variables_to_restore=self.all_model_vars,
             session_config=self.session_config,
             timeout=timeout,

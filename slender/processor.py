@@ -73,7 +73,7 @@ class BaseProcessor(object):
     def _resize(image, shorter_dim, aspect_ratio=None):
         if aspect_ratio is None:
             (original_height, original_width) = BaseProcessor._height_and_width(image)
-            aspect_ratio = tf.truediv(original_width, original_height)
+            aspect_ratio = tf.cast(tf.truediv(original_width, original_height), tf.float32)
 
         resize_dims = tf.cond(
             tf.less(aspect_ratio, 1.0),
@@ -143,7 +143,7 @@ class BaseProcessor(object):
 
     @staticmethod
     def _rotate(image, angle):
-        image = tf.contrib.image.rotate(image, angle=angle)
+        image = tf.contrib.image.rotate(image, angle)
         return image
 
     @staticmethod
@@ -271,3 +271,53 @@ class BaseProcessor(object):
                 setattr(self, key, value)
 
         return Blob(**blob_dict)
+
+
+class TrainProcessor(BaseProcessor):
+    def __init__(self,
+                 net_dim=224,
+                 shorter_dim=Range((256, 512)),
+                 aspect_ratio=Range((0.5, 2.0)),
+                 delta=Range((-64, 64)),
+                 contrast=Range((0.5, 1.5)),
+                 batch_size=64):
+
+        super(TrainProcessor, self).__init__(
+            net_dim=net_dim,
+            batch_size=batch_size,
+        )
+
+        self.shorter_dim = shorter_dim
+        self.aspect_ratio = aspect_ratio
+        self.delta = delta
+        self.contrast = contrast
+
+    def preprocess_images(self, images):
+        images = self.mean_subtraction(images)
+        images = self.resize(images, shorter_dim=self.shorter_dim, aspect_ratio=self.aspect_ratio)
+        images = self.random_crop(images)
+        images = self.random_flip(images)
+        images = self.adjust(images, delta=self.delta, contrast=self.contrast)
+        return images
+
+
+class TestProcessor(BaseProcessor):
+    def __init__(self,
+                 net_dim=256,
+                 shorter_dim=List([256, 512]),
+                 aspect_ratio=List([1.0]),
+                 batch_size=16):
+
+        super(TestProcessor, self).__init__(
+            net_dim=net_dim,
+            batch_size=batch_size,
+        )
+
+        self.shorter_dim = shorter_dim
+        self.aspect_ratio = aspect_ratio
+
+    def preprocess_images(self, images):
+        images = self.mean_subtraction(images)
+        images = self.resize(images, shorter_dim=self.shorter_dim, aspect_ratio=self.aspect_ratio)
+        images = self.central_crop_or_pad(images)
+        return images
