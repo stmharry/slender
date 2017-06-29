@@ -151,14 +151,6 @@ class TrainScheme(BaseScheme):
     SUMMARY_SCALAR_ATTRS = ['learning_rate']
 
     def prepare(self):
-        self.summary_ops = []
-        for attr in self.summary_scalar_attrs + TrainScheme.SUMMARY_SCALAR_ATTRS:
-            summary_op = tf.summary.scalar(
-                scope_join_fn(TrainScheme.VAR_SCOPE)(attr),
-                self.__getattribute__(attr),
-            )
-            self.summary_ops.append(summary_op)
-
         with tf.variable_scope(TrainScheme.VAR_SCOPE):
             all_model_vars = BaseNet.get_scope_set()
             vars_to_restore = BaseNet.get_scope_set(self.scopes_to_restore)
@@ -203,6 +195,14 @@ class TrainScheme(BaseScheme):
                 save_relative_paths=True,
             )
 
+        self.summary_ops = []
+        for attr in self.summary_scalar_attrs + TrainScheme.SUMMARY_SCALAR_ATTRS:
+            summary_op = tf.summary.scalar(
+                scope_join_fn(TrainScheme.VAR_SCOPE)(attr),
+                self.__getattribute__(attr),
+            )
+            self.summary_ops.append(summary_op)
+
     def run(self,
             num_steps,
             log_every_n_steps=1,
@@ -230,6 +230,7 @@ class TestScheme(BaseScheme):
 
     def prepare(self):
         with tf.variable_scope(TestScheme.VAR_SCOPE):
+            self.all_model_vars = BaseNet.get_scope_set()
             (values, update_ops) = slim.metrics.aggregate_metrics(*[
                 slim.metrics.streaming_mean(self.__getattribute__(attr))
                 for attr in self.summary_scalar_attrs
@@ -246,8 +247,6 @@ class TestScheme(BaseScheme):
                 self.__getattribute__(attr),
             )
             self.summary_ops.append(summary_op)
-
-        self.all_model_vars = BaseNet.get_scope_set()
 
     def run(self,
             num_steps,
