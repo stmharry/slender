@@ -52,8 +52,6 @@ RUN yes "" | ./configure && \
     rm -rf /root/.cache
 
 # SLENDER
-RUN curl -L https://github.com/stmharry/slender/archive/$SLENDER_BRANCH.tar.gz | tar -zx -C /usr/src && \
-    mv /usr/src/slender-* /usr/src/slender/ && \
-    rm -r /usr/src/slender/model
+COPY . /usr/src/slender
 
 WORKDIR /
