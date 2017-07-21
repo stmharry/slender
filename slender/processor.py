@@ -171,16 +171,17 @@ class BaseProcessor(object):
 
     def __init__(self,
                  net_dim,
-                 num_duplicates=1,
                  batch_size=64):
 
         self.net_dim = net_dim
         self.shape = (net_dim, net_dim, 3)
-        self.num_duplicates = num_duplicates
         self.batch_size = batch_size
 
     def decode_jpeg(self, content):
-        return [BaseProcessor._decode_jpeg(content)] * self.num_duplicates
+        return BaseProcessor._decode_jpeg(content)
+
+    def duplicate(self, image, num_duplicates=1):
+        return [image] * num_duplicates
 
     def set_shape(self, images):
         return BaseProcessor._apply(BaseProcessor._set_shape, {
@@ -232,12 +233,12 @@ class BaseProcessor(object):
         })
 
     @abc.abstractmethod
-    def preprocess_images(self, images):
+    def preprocess_image(self, image):
         pass
 
     def preprocess_single(self, content):
-        images = self.decode_jpeg(content)
-        images = self.preprocess_images(images)
+        image = self.decode_jpeg(content)
+        images = self.preprocess_image(image)
         images = tf.stack(images)
         return images
 
@@ -287,12 +288,14 @@ class TrainProcessor(BaseProcessor):
             batch_size=batch_size,
         )
 
+        self.num_duplicates = num_duplicates
         self.shorter_dim = shorter_dim
         self.aspect_ratio = aspect_ratio
         self.delta = delta
         self.contrast = contrast
 
-    def preprocess_images(self, images):
+    def preprocess_image(self, image):
+        images = self.duplicate(image, num_duplicates=self.num_duplicates)
         images = self.mean_subtraction(images)
         images = self.resize(images, shorter_dim=self.shorter_dim, aspect_ratio=self.aspect_ratio)
         images = self.random_crop(images)
@@ -316,7 +319,8 @@ class TestProcessor(BaseProcessor):
         self.shorter_dim = shorter_dim
         self.aspect_ratio = aspect_ratio
 
-    def preprocess_images(self, images):
+    def preprocess_image(self, image):
+        images = self.duplicate(image)
         images = self.mean_subtraction(images)
         images = self.resize(images, shorter_dim=self.shorter_dim, aspect_ratio=self.aspect_ratio)
         images = self.central_crop_or_pad(images)

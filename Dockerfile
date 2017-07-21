@@ -51,21 +51,6 @@ RUN yes "" | ./configure && \
     rm -rf /tmp/pip && \
     rm -rf /root/.cache
 
-# FAISS
-RUN curl -L https://github.com/facebookresearch/faiss/archive/master.tar.gz | tar -zx -C / && \
-    mv /faiss-* /faiss
-
-WORKDIR /faiss
-RUN mv example_makefiles/makefile.inc.Linux makefile.inc && \
-    echo PYTHONCFLAGS+=-I/usr/local/lib/python2.7/dist-packages/numpy/core/include >> makefile.inc && \
-    echo BLASLDFLAGS=/usr/lib/libopenblas.so.0 >> makefile.inc && \
-    make -j $(nproc) && \
-    cd gpu && \
-    make -j $(nproc) && \
-    make py && \
-    mv /faiss/faiss.py /faiss/swigfaiss_gpu.py /faiss/_swigfaiss_gpu.so /usr/local/lib/python2.7/dist-packages && \
-    rm -rf /faiss
-
 # SLENDER
 RUN curl -L https://github.com/stmharry/slender/archive/$SLENDER_BRANCH.tar.gz | tar -zx -C /usr/src && \
     mv /usr/src/slender-* /usr/src/slender/ && \
