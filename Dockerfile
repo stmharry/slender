@@ -4,7 +4,6 @@ MAINTAINER Tzu Ming Hsu <stmharry@mit.edu>
 
 ENV BAZEL_VERSION=0.5.0 \
     TF_BRANCH=r1.2 \
-    FAISS_BRANCH=master \
     SLENDER_BRANCH=master
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -15,11 +14,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         g++ \
         libapache2-mod-wsgi \
         libcupti-dev \
-        libopenblas-dev \
         python \
         python-dev \
         python-numpy \
-        swig \
         unzip \
         && \
     apt-get clean && \
@@ -52,6 +49,7 @@ RUN yes "" | ./configure && \
     rm -rf /root/.cache
 
 # SLENDER
-COPY . /usr/src/slender
+RUN curl -L https://github.com/stmharry/slender/archive/$SLENDER_BRANCH.tar.gz | tar -zx -C /usr/src && \
+    mv /usr/src/slender-* /usr/src/slender/
 
 WORKDIR /
