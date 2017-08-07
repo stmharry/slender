@@ -9,7 +9,7 @@ from .util import scope_join_fn
 
 
 class BaseNet(object):
-    IS_TRAINING = None  # set by scheme
+    IsTraining = None  # set by scheme
 
     @staticmethod
     def get_scope_set(scopes=None, collection=tf.GraphKeys.GLOBAL_VARIABLES):
@@ -65,22 +65,22 @@ class BaseNet(object):
 
 
 class ResNet50(BaseNet):
-    VAR_SCOPE = 'resnet_v1_50'
-    CKPT_PATH = os.path.join(
+    VarScope = 'resnet_v1_50'
+    CkptPath = os.path.join(
         os.path.realpath(os.path.dirname(__file__)),
         os.pardir,
         'model',
         'resnet_v1_50.ckpt',
     )
-    SCOPES_TO_RESTORE = [
+    ScopesToRestore = [
         None,
     ]
-    SCOPES_TO_FREEZE = [
+    ScopesToFreeze = [
         'conv1',
         'block1',
         'block2',
     ]
-    SUMMARY_SCALAR_ATTRS = []
+    SummaryScalarAttrs = []
 
     def __init__(self,
                  working_dir=None,
@@ -101,7 +101,7 @@ class ResNet50(BaseNet):
         scope = None  # TODO: allow remapping when assigning from ckpt
 
         self.__net = resnet_v1
-        self.__var_scope = scope_join_fn(scope)(ResNet50.VAR_SCOPE)
+        self.__var_scope = scope_join_fn(scope)(ResNet50.VarScope)
         self.__scope_join = scope_join_fn(self.__var_scope)
 
         self.arg_scope = self.__net.resnet_arg_scope(
@@ -110,10 +110,10 @@ class ResNet50(BaseNet):
 
         super(ResNet50, self).__init__(
             working_dir,
-            ckpt_path=ckpt_path or ResNet50.CKPT_PATH,
-            scopes_to_restore=map(self.__scope_join, scopes_to_restore or ResNet50.SCOPES_TO_RESTORE),
-            scopes_to_freeze=map(self.__scope_join, scopes_to_freeze or ResNet50.SCOPES_TO_FREEZE),
-            summary_scalar_attrs=summary_scalar_attrs or ResNet50.SUMMARY_SCALAR_ATTRS,
+            ckpt_path=ckpt_path or ResNet50.CkptPath,
+            scopes_to_restore=map(self.__scope_join, scopes_to_restore or ResNet50.ScopesToRestore),
+            scopes_to_freeze=map(self.__scope_join, scopes_to_freeze or ResNet50.ScopesToFreeze),
+            summary_scalar_attrs=summary_scalar_attrs or ResNet50.SummaryScalarAttrs,
             learning_rate=learning_rate,
             learning_rate_decay_steps=learning_rate_decay_steps,
             learning_rate_decay_rate=learning_rate_decay_rate,
@@ -126,7 +126,7 @@ class ResNet50(BaseNet):
         with slim.arg_scope(self.arg_scope):
             (feat_maps, _) = self.__net.resnet_v1_50(
                 blob['images'],
-                is_training=self.IS_TRAINING,
+                is_training=self.IsTraining,
                 global_pool=False,
                 scope=self.__var_scope,
             )
@@ -138,20 +138,20 @@ class ResNet50(BaseNet):
 
 
 class BaseScheme(BaseNet):
-    VAR_SCOPE = None
+    VarScope = None
 
     @classmethod
     def get_working_dir(cls, working_dir):
-        return os.path.join(working_dir, cls.VAR_SCOPE)
+        return os.path.join(working_dir, cls.VarScope)
 
 
 class TrainScheme(BaseScheme):
-    VAR_SCOPE = 'train'
-    IS_TRAINING = True
-    SUMMARY_SCALAR_ATTRS = ['learning_rate']
+    VarScope = 'train'
+    IsTraining = True
+    SummaryScalarAttrs = ['learning_rate']
 
     def prepare(self):
-        with tf.variable_scope(TrainScheme.VAR_SCOPE):
+        with tf.variable_scope(TrainScheme.VarScope):
             all_model_vars = BaseNet.get_scope_set()
             vars_to_restore = BaseNet.get_scope_set(self.scopes_to_restore)
             vars_to_train = (
@@ -196,9 +196,9 @@ class TrainScheme(BaseScheme):
             )
 
         self.summary_ops = []
-        for attr in self.summary_scalar_attrs + TrainScheme.SUMMARY_SCALAR_ATTRS:
+        for attr in self.summary_scalar_attrs + TrainScheme.SummaryScalarAttrs:
             summary_op = tf.summary.scalar(
-                scope_join_fn(TrainScheme.VAR_SCOPE)(attr),
+                scope_join_fn(TrainScheme.VarScope)(attr),
                 self.__getattribute__(attr),
             )
             self.summary_ops.append(summary_op)
@@ -224,12 +224,12 @@ class TrainScheme(BaseScheme):
 
 
 class TestScheme(BaseScheme):
-    VAR_SCOPE = 'test'
-    IS_TRAINING = False
-    SUMMARY_SCALAR_ATTRS = []
+    VarScope = 'test'
+    IsTraining = False
+    SummaryScalarAttrs = []
 
     def prepare(self):
-        with tf.variable_scope(TestScheme.VAR_SCOPE):
+        with tf.variable_scope(TestScheme.VarScope):
             self.all_model_vars = BaseNet.get_scope_set()
             (values, update_ops) = slim.metrics.aggregate_metrics(*[
                 slim.metrics.streaming_mean(self.__getattribute__(attr))
@@ -241,9 +241,9 @@ class TestScheme(BaseScheme):
                 self.__setattr__(attr, value)
 
         self.summary_ops = []
-        for attr in self.summary_scalar_attrs + TestScheme.SUMMARY_SCALAR_ATTRS:
+        for attr in self.summary_scalar_attrs + TestScheme.SummaryScalarAttrs:
             summary_op = tf.summary.scalar(
-                scope_join_fn(TestScheme.VAR_SCOPE)(attr),
+                scope_join_fn(TestScheme.VarScope)(attr),
                 self.__getattribute__(attr),
             )
             self.summary_ops.append(summary_op)
@@ -267,11 +267,11 @@ class TestScheme(BaseScheme):
 
 
 class OnlineScheme(BaseScheme):
-    VAR_SCOPE = 'online'
-    IS_TRAINING = False
+    VarScope = 'online'
+    IsTraining = False
 
     def prepare(self):
-        with tf.variable_scope(OnlineScheme.VAR_SCOPE):
+        with tf.variable_scope(OnlineScheme.VarScope):
             vars_to_restore = BaseNet.get_scope_set()
 
             (assign_op, assign_feed_dict) = slim.assign_from_checkpoint(
@@ -292,9 +292,13 @@ class OnlineScheme(BaseScheme):
 
 
 class ClassifyNet(ResNet50):
-    VAR_SCOPE = 'classify_net'
-    SUMMARY_SCALAR_ATTRS = ['loss', 'total_loss', 'accuracy']
-    OUTPUT_ATTRS = ['predictions', 'labels']
+    VarScope = 'classify_net'
+    SummaryScalarAttrs = ['loss', 'total_loss', 'accuracy']
+    OutputAttrs = ['predictions', 'labels']
+
+    class Flavor:
+        SoftMax = 'softmax'
+        Sigmoid = 'sigmoid'
 
     def __init__(self,
                  num_classes,
@@ -305,6 +309,7 @@ class ClassifyNet(ResNet50):
                  scopes_to_restore=None,
                  scopes_to_freeze=None,
                  summary_scalar_attrs=None,
+                 flavor=Flavor.SoftMax,
                  output_attrs=None,
                  learning_rate=1.0,
                  learning_rate_decay_steps=None,
@@ -313,7 +318,7 @@ class ClassifyNet(ResNet50):
                  log_device_placement=False,
                  verbosity=tf.logging.INFO):
 
-        self.__var_scope = scope_join_fn(scope)(ClassifyNet.VAR_SCOPE)
+        self.__var_scope = scope_join_fn(scope)(ClassifyNet.VarScope)
         self.__scope_join = scope_join_fn(self.__var_scope)
 
         super(ClassifyNet, self).__init__(
@@ -323,7 +328,7 @@ class ClassifyNet(ResNet50):
             scope=self.__var_scope,
             scopes_to_restore=scopes_to_restore,
             scopes_to_freeze=scopes_to_freeze,
-            summary_scalar_attrs=summary_scalar_attrs or ClassifyNet.SUMMARY_SCALAR_ATTRS,
+            summary_scalar_attrs=summary_scalar_attrs or ClassifyNet.SummaryScalarAttrs,
             learning_rate=learning_rate,
             learning_rate_decay_steps=learning_rate_decay_steps,
             learning_rate_decay_rate=learning_rate_decay_rate,
@@ -333,7 +338,8 @@ class ClassifyNet(ResNet50):
         )
 
         self.num_classes = num_classes
-        self.output_attrs = output_attrs or ClassifyNet.OUTPUT_ATTRS
+        self.flavor = flavor
+        self.output_attrs = output_attrs or ClassifyNet.OutputAttrs
 
     def forward(self, blob):
         blob = super(ClassifyNet, self).forward(blob)
@@ -365,7 +371,13 @@ class ClassifyNet(ResNet50):
                 axis=(1, 2),
                 name='logits',
             )
-            self.predictions = tf.nn.softmax(
+
+            if self.flavor == ClassifyNet.Flavor.Sigmoid:
+                activation_fn = tf.sigmoid
+            elif self.flavor == ClassifyNet.Flavor.SoftMax:
+                activation_fn = tf.nn.softmax
+
+            self.predictions = activation_fn(
                 self.logits,
                 name='predictions',
             )

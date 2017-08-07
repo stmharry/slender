@@ -11,8 +11,7 @@ _ = scope_join_fn('producer')
 
 
 class BaseProducer(object):
-    _CLASS_NAME_FILE_NAME = 'class_names.txt'
-    _BUFFER_CAPACITY = 256
+    BufferCapacity = 256
 
     @staticmethod
     def queue_join(values_list, dtypes=None, shapes=None, enqueue_many=False, name='queue_join'):
@@ -20,7 +19,7 @@ class BaseProducer(object):
         shapes = shapes or [value.get_shape()[enqueue_many:] for value in values_list[0]]
 
         queue = tf.FIFOQueue(
-            capacity=BaseProducer._BUFFER_CAPACITY,
+            capacity=BaseProducer.BufferCapacity,
             dtypes=dtypes,
             shapes=shapes,
             name=name,
@@ -37,6 +36,10 @@ class BaseProducer(object):
 
         return queue
 
+
+class ImageNetBaseProducer(BaseProducer):
+    ClassNameFileName = 'class_names.txt'
+
     def __init__(self,
                  working_dir=None,
                  image_dir=None,
@@ -47,7 +50,7 @@ class BaseProducer(object):
         self.batch_size = batch_size
 
         if working_dir is not None:
-            self.classname_path = os.path.join(working_dir, BaseProducer._CLASS_NAME_FILE_NAME)
+            self.classname_path = os.path.join(working_dir, ImageNetBaseProducer.ClassNameFileName)
             if os.path.isfile(self.classname_path):
                 self.class_names = np.loadtxt(self.classname_path, dtype=np.str)
             else:
@@ -61,7 +64,7 @@ class BaseProducer(object):
             self.num_classes = len(self.class_names)
 
 
-class LocalFileProducer(BaseProducer):
+class ImageNetFileProducer(ImageNetBaseProducer):
     class SubsampleFunction(object):
         @staticmethod
         def NO_SUBSAMPLE():
@@ -87,7 +90,7 @@ class LocalFileProducer(BaseProducer):
                  subsample_fn=SubsampleFunction.NO_SUBSAMPLE(),
                  mix_scheme=MixScheme.NONE):
 
-        super(LocalFileProducer, self).__init__(
+        super(ImageNetFileProducer, self).__init__(
             working_dir=working_dir,
             image_dir=image_dir,
             batch_size=batch_size,
@@ -106,6 +109,7 @@ class LocalFileProducer(BaseProducer):
                         continue
                     if not subsample_fn(file_name):
                         continue
+
                     self.filenames_by_subdir[subdir_name].append(os.path.join(file_dir, file_name))
 
             print('Subdir {:s} ({:d})'.format(subdir_name, len(self.filenames_by_subdir[subdir_name])))
@@ -166,12 +170,12 @@ class LocalFileProducer(BaseProducer):
         return Blob(contents=self.contents, labels=self.labels)
 
 
-class PlaceholderProducer(BaseProducer):
+class ImageNetPlaceholderProducer(ImageNetBaseProducer):
     def __init__(self,
                  working_dir=None,
                  batch_size=64):
 
-        super(PlaceholderProducer, self).__init__(
+        super(ImageNetPlaceholderProducer, self).__init__(
             working_dir=working_dir,
             batch_size=batch_size,
         )
@@ -184,3 +188,7 @@ class PlaceholderProducer(BaseProducer):
             self.labels = tf.placeholder_with_default(label_default, shape=(None,))
 
         return Blob(contents=self.contents, labels=self.labels)
+
+
+LocalFileProducer = ImageNetFileProducer
+PlaceholderProducer = ImageNetPlaceholderProducer

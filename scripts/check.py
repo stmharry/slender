@@ -59,6 +59,7 @@ if __name__ == '__main__':
         num_parallels=FLAGS.num_parallels,
     )
 
+    all_file_paths = []
     subdir_names = os.listdir(FLAGS.image_dir)
     num_subdirs = len(subdir_names)
     for (num_subdir, subdir_name) in enumerate(subdir_names):
@@ -74,17 +75,23 @@ if __name__ == '__main__':
                 num_files,
             ))
 
-            file_paths = []
             for (num_file, file_name) in enumerate(file_names):
                 file_path = os.path.join(file_dir, file_name)
-                file_paths.append(file_path)
+                all_file_paths.append(file_path)
+
+        while len(all_file_paths) > FLAGS.batch_size or num_subdir == num_subdirs - 1:
+            num_file_paths = min(FLAGS.batch_size, len(all_file_paths))
+
+            file_paths = all_file_paths[:num_file_paths]
+            del all_file_paths[:num_file_paths]
 
             task = Task(inputs=file_paths)
             valids = task.eval(factory=factory)
-            sys.stderr.write('\n')
             for (file_path, valid) in zip(file_paths, valids):
                 if valid is None or not valid:
-                    print('Exception raised on {:s}'.format(file_path))
+                    sys.stderr.write('Exception raised on {:s}\n'.format(file_path))
                     os.remove(file_path)
+
+        sys.stderr.write('\n')
 
     factory.stop()
