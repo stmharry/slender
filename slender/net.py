@@ -7,6 +7,8 @@ import tensorflow.contrib.slim as slim
 from .blob import Blob
 from .util import scope_join_fn
 
+_ = scope_join_fn('net')
+
 
 class BaseNet(object):
     IsTraining = None  # set by scheme
@@ -138,20 +140,23 @@ class ResNet50(BaseNet):
 
 
 class BaseScheme(BaseNet):
-    VarScope = None
+    WorkingScope = None
 
     @classmethod
     def get_working_dir(cls, working_dir):
-        return os.path.join(working_dir, cls.VarScope)
+        if cls.WorkingScope is None:
+            return working_dir
+        else:
+            return os.path.join(working_dir, cls.WorkingScope)
 
 
 class TrainScheme(BaseScheme):
-    VarScope = 'train'
+    WorkingScope = 'train'
     IsTraining = True
     SummaryScalarAttrs = ['learning_rate']
 
     def prepare(self):
-        with tf.variable_scope(TrainScheme.VarScope):
+        with tf.variable_scope(_(None)):
             all_model_vars = BaseNet.get_scope_set()
             vars_to_restore = BaseNet.get_scope_set(self.scopes_to_restore)
             vars_to_train = (
@@ -162,7 +167,6 @@ class TrainScheme(BaseScheme):
             self.learning_rate = tf.constant(
                 self.learning_rate,
                 dtype=tf.float32,
-                name='learning_rate',
             )
             if self.learning_rate_decay_steps is not None:
                 self.learning_rate = tf.train.exponential_decay(
@@ -171,7 +175,6 @@ class TrainScheme(BaseScheme):
                     decay_steps=self.learning_rate_decay_steps,
                     decay_rate=self.learning_rate_decay_rate,
                     staircase=True,
-                    name='decaying_learning_rate',
                 )
 
             optimizer = tf.train.AdamOptimizer(self.learning_rate, epsilon=1.0)
@@ -195,13 +198,13 @@ class TrainScheme(BaseScheme):
                 save_relative_paths=True,
             )
 
-        self.summary_ops = []
-        for attr in self.summary_scalar_attrs + TrainScheme.SummaryScalarAttrs:
-            summary_op = tf.summary.scalar(
-                scope_join_fn(TrainScheme.VarScope)(attr),
-                self.__getattribute__(attr),
-            )
-            self.summary_ops.append(summary_op)
+            self.summary_ops = []
+            for attr in self.summary_scalar_attrs + TrainScheme.SummaryScalarAttrs:
+                summary_op = tf.summary.scalar(
+                    attr,
+                    self.__getattribute__(attr),
+                )
+                self.summary_ops.append(summary_op)
 
     def run(self,
             num_steps,
@@ -224,12 +227,12 @@ class TrainScheme(BaseScheme):
 
 
 class TestScheme(BaseScheme):
-    VarScope = 'test'
+    WorkingScope = 'test'
     IsTraining = False
     SummaryScalarAttrs = []
 
     def prepare(self):
-        with tf.variable_scope(TestScheme.VarScope):
+        with tf.variable_scope(_(None)):
             self.all_model_vars = BaseNet.get_scope_set()
             (values, update_ops) = slim.metrics.aggregate_metrics(*[
                 slim.metrics.streaming_mean(self.__getattribute__(attr))
@@ -240,13 +243,13 @@ class TestScheme(BaseScheme):
             for (attr, value) in zip(self.summary_scalar_attrs, values):
                 self.__setattr__(attr, value)
 
-        self.summary_ops = []
-        for attr in self.summary_scalar_attrs + TestScheme.SummaryScalarAttrs:
-            summary_op = tf.summary.scalar(
-                scope_join_fn(TestScheme.VarScope)(attr),
-                self.__getattribute__(attr),
-            )
-            self.summary_ops.append(summary_op)
+            self.summary_ops = []
+            for attr in self.summary_scalar_attrs + TestScheme.SummaryScalarAttrs:
+                summary_op = tf.summary.scalar(
+                    attr,
+                    self.__getattribute__(attr),
+                )
+                self.summary_ops.append(summary_op)
 
     def run(self,
             num_steps,
@@ -267,20 +270,19 @@ class TestScheme(BaseScheme):
 
 
 class OnlineScheme(BaseScheme):
-    VarScope = 'online'
+    WorkingScope = 'online'
     IsTraining = False
 
     def prepare(self):
-        with tf.variable_scope(OnlineScheme.VarScope):
-            vars_to_restore = BaseNet.get_scope_set()
+        vars_to_restore = BaseNet.get_scope_set()
 
-            (assign_op, assign_feed_dict) = slim.assign_from_checkpoint(
-                tf.train.latest_checkpoint(TrainScheme.get_working_dir(self.working_dir)),
-                list(vars_to_restore),
-            )
+        (assign_op, assign_feed_dict) = slim.assign_from_checkpoint(
+            tf.train.latest_checkpoint(TrainScheme.get_working_dir(self.working_dir)),
+            list(vars_to_restore),
+        )
 
-            self.init_op = assign_op
-            self.init_feed_dict = assign_feed_dict
+        self.init_op = assign_op
+        self.init_feed_dict = assign_feed_dict
 
     def run(self, graph=None):
         self.sess = tf.Session(
@@ -373,14 +375,16 @@ class ClassifyNet(ResNet50):
             )
 
             if self.flavor == ClassifyNet.Flavor.Sigmoid:
-                activation_fn = tf.sigmoid
+                self.predictions = tf.sigmoid(
+                    self.logits,
+                    name='predictions',
+                )
             elif self.flavor == ClassifyNet.Flavor.SoftMax:
-                activation_fn = tf.nn.softmax
+                self.predictions = tf.nn.softmax(
+                    self.logits,
+                    name='predictions',
+                )
 
-            self.predictions = activation_fn(
-                self.logits,
-                name='predictions',
-            )
             self.targets = tf.one_hot(
                 self.labels,
                 depth=self.num_classes,

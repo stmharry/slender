@@ -121,7 +121,7 @@ class ImageNetFileProducer(ImageNetBaseProducer):
         self.mix_scheme = mix_scheme
 
     def blob(self):
-        with tf.variable_scope(_('blob')):
+        with tf.variable_scope(_(None)):
             if self.mix_scheme == LocalFileProducer.MixScheme.NONE:
                 filename_labels = []
                 for (subdir_name, file_names) in self.filenames_by_subdir.items():
@@ -181,7 +181,7 @@ class ImageNetPlaceholderProducer(ImageNetBaseProducer):
         )
 
     def blob(self):
-        with tf.variable_scope(_('blob')):
+        with tf.variable_scope(_(None)):
             self.contents = tf.placeholder(tf.string, shape=(None,))
 
             label_default = -1 * tf.ones_like(self.contents, dtype=tf.int64)
