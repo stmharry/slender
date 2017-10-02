@@ -67,7 +67,8 @@ class BatchFactory(threading.Thread):
     def __init__(self,
                  batch_size,
                  queue_size=QUEUE_SIZE,
-                 timeout_fn=TimeoutFunction.CONSTANT(offset=0)):
+                 timeout_fn=TimeoutFunction.CONSTANT(offset=0),
+                 debug=False):
 
         super(BatchFactory, self).__init__()
 
@@ -76,6 +77,7 @@ class BatchFactory(threading.Thread):
         self.batch_size = batch_size
         self.queue = Queue.Queue(maxsize=queue_size)
         self.timeout_fn = timeout_fn
+        self.debug = debug
 
     def stop(self):
         self._stop.set()
@@ -111,7 +113,10 @@ class BatchFactory(threading.Thread):
             try:
                 outputs = self.run_one(inputs)
             # try one by one
-            except Exception:
+            except Exception as e:
+                if self.debug:
+                    print(e)
+
                 outputs = []
                 for input_ in inputs:
                     try:
