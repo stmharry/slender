@@ -26,8 +26,8 @@ if __name__ == '__main__':
         image_dir=FLAGS.image_dir,
         working_dir=working_dir,
         batch_size=FLAGS.batch_size,
-        subsample_fn=Producer.SubsampleFunction.HASH(mod=FLAGS.subsample_ratio, divisible=True),
-        mix_scheme=Producer.MixScheme.NONE,
+        subsample_fn=Producer.SubsampleFunction.Hash(mod=FLAGS.subsample_ratio, divisible=True),
+        mix_scheme=Producer.MixScheme.NoScheme,
     )
     processor = Processor(
         batch_size=FLAGS.batch_size,

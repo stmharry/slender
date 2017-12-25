@@ -67,28 +67,28 @@ class ImageNetBaseProducer(BaseProducer):
 class ImageNetFileProducer(ImageNetBaseProducer):
     class SubsampleFunction(object):
         @staticmethod
-        def NO_SUBSAMPLE():
+        def NoSubsample():
             def subsample(string):
                 return True
             return subsample
 
         @staticmethod
-        def HASH(mod, divisible):
+        def Hash(mod, divisible):
             def subsample(string):
                 return bool(hash(string) % mod) != divisible
             return subsample
 
     class MixScheme:
-        NONE = 0
-        UNIFORM = 1
+        NoScheme = 0
+        Uniform = 1
 
     def __init__(self,
                  working_dir=None,
                  image_dir=None,
                  batch_size=64,
                  num_parallels=8,
-                 subsample_fn=SubsampleFunction.NO_SUBSAMPLE(),
-                 mix_scheme=MixScheme.NONE):
+                 subsample_fn=SubsampleFunction.NoSubsample(),
+                 mix_scheme=MixScheme.NoScheme):
 
         super(ImageNetFileProducer, self).__init__(
             working_dir=working_dir,
@@ -122,7 +122,7 @@ class ImageNetFileProducer(ImageNetBaseProducer):
 
     def blob(self):
         with tf.variable_scope(_(None)):
-            if self.mix_scheme == LocalFileProducer.MixScheme.NONE:
+            if self.mix_scheme == LocalFileProducer.MixScheme.NoScheme:
                 filename_labels = []
                 for (subdir_name, file_names) in self.filenames_by_subdir.items():
                     if subdir_name in self.class_names:
@@ -138,7 +138,7 @@ class ImageNetFileProducer(ImageNetBaseProducer):
                 labels = tf.convert_to_tensor(labels, dtype=tf.int64)
                 file_names = tf.convert_to_tensor(file_names, dtype=tf.string)
 
-            elif self.mix_scheme == LocalFileProducer.MixScheme.UNIFORM:
+            elif self.mix_scheme == LocalFileProducer.MixScheme.Uniform:
                 assert set(self.filenames_by_subdir.keys()) == set(self.class_names)
 
                 file_names = []
