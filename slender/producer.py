@@ -37,7 +37,7 @@ class BaseProducer(object):
         return queue
 
 
-class ImageNetBaseProducer(BaseProducer):
+class ClassifyProducer(BaseProducer):
     ClassNameFileName = 'class_names.txt'
 
     def __init__(self,
@@ -50,7 +50,7 @@ class ImageNetBaseProducer(BaseProducer):
         self.batch_size = batch_size
 
         if working_dir is not None:
-            self.classname_path = os.path.join(working_dir, ImageNetBaseProducer.ClassNameFileName)
+            self.classname_path = os.path.join(working_dir, ClassifyProducer.ClassNameFileName)
             if os.path.isfile(self.classname_path):
                 self.class_names = np.loadtxt(self.classname_path, dtype=np.str)
             else:
@@ -64,7 +64,7 @@ class ImageNetBaseProducer(BaseProducer):
             self.num_classes = len(self.class_names)
 
 
-class ImageNetFileProducer(ImageNetBaseProducer):
+class ImageNetFileProducer(ClassifyProducer):
     class SubsampleFunction(object):
         @staticmethod
         def NoSubsample():
@@ -98,6 +98,9 @@ class ImageNetFileProducer(ImageNetBaseProducer):
 
         self.filenames_by_subdir = {}
         for subdir_name in os.listdir(image_dir):
+            if subdir_name.startswith('.'):
+                continue
+
             self.filenames_by_subdir[subdir_name] = []
 
             subdir_path = os.path.join(image_dir, subdir_name)
@@ -135,20 +138,21 @@ class ImageNetFileProducer(ImageNetBaseProducer):
 
                 (file_names, labels) = zip(*filename_labels)
 
-                labels = tf.convert_to_tensor(labels, dtype=tf.int64)
-                file_names = tf.convert_to_tensor(file_names, dtype=tf.string)
+                indices = tf.random_shuffle(tf.range(len(filename_labels), dtype=tf.int64))
+                labels = tf.gather(labels, indices)
+                labels = tf.cast(labels, dtype=tf.int64)
+                file_names = tf.gather(file_names, indices)
 
             elif self.mix_scheme == LocalFileProducer.MixScheme.Uniform:
                 assert set(self.filenames_by_subdir.keys()) == set(self.class_names)
 
                 file_names = []
                 for class_name in self.class_names:
-                    file_names_ = self.filenames_by_subdir[class_name]
-                    file_name_ = tf.train.string_input_producer(file_names_, name=class_name).dequeue()
-                    file_names.append(file_name_)
+                    file_name = tf.train.string_input_producer(self.filenames_by_subdir[class_name], name=class_name).dequeue()
+                    file_names.append(file_name)
 
-                labels = tf.random_shuffle(tf.to_int64(tf.range(self.num_classes)))
-                file_names = tf.gather(tf.stack(file_names), labels)
+                labels = tf.random_shuffle(tf.range(self.num_classes, dtype=tf.int64))
+                file_names = tf.gather(file_names, labels)
 
             filename_label_queue = BaseProducer.queue_join(
                 [(file_names, labels)],
@@ -170,19 +174,31 @@ class ImageNetFileProducer(ImageNetBaseProducer):
         return Blob(contents=self.contents, labels=self.labels)
 
 
-class ImageNetPlaceholderProducer(ImageNetBaseProducer):
+class PlaceholderProducer(ClassifyProducer):
     def __init__(self,
                  working_dir=None,
-                 batch_size=64):
+                 batch_size=64,
+                 num_readers=4):
 
-        super(ImageNetPlaceholderProducer, self).__init__(
+        super(PlaceholderProducer, self).__init__(
             working_dir=working_dir,
             batch_size=batch_size,
         )
 
+        self.num_readers = num_readers
+
     def blob(self):
         with tf.variable_scope(_(None)):
-            self.contents = tf.placeholder(tf.string, shape=(None,))
+            empty_names = tf.zeros((0,), dtype=tf.string)
+            self.file_names = tf.placeholder_with_default(empty_names, shape=(None,))
+
+            self.contents = tf.map_fn(
+                tf.read_file,
+                self.file_names,
+                dtype=tf.string,
+                parallel_iterations=self.num_readers,
+            )
+            self.contents = tf.placeholder_with_default(self.contents, shape=(None,))
 
             label_default = -1 * tf.ones_like(self.contents, dtype=tf.int64)
             self.labels = tf.placeholder_with_default(label_default, shape=(None,))
@@ -191,4 +207,3 @@ class ImageNetPlaceholderProducer(ImageNetBaseProducer):
 
 
 LocalFileProducer = ImageNetFileProducer
-PlaceholderProducer = ImageNetPlaceholderProducer

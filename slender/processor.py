@@ -152,6 +152,16 @@ class BaseProcessor(object):
         return BaseProcessor._rotate(image, angle)
 
     @staticmethod
+    def _rotate90(image, k):
+        image = tf.image.rot90(image, k)
+        return image
+
+    @staticmethod
+    def _random_rotate90(image):
+        k = tf.random_uniform((), maxval=3, dtype=tf.int32)
+        return BaseProcessor._rotate90(image, k)
+
+    @staticmethod
     def _random_flip(image):
         image = tf.image.random_flip_left_right(image)
         return image
@@ -220,6 +230,11 @@ class BaseProcessor(object):
             'image': images,
         })
 
+    def random_rotate90(self, images):
+        return BaseProcessor._apply(BaseProcessor._random_rotate90, {
+            'image': images,
+        })
+
     def random_flip(self, images):
         return BaseProcessor._apply(BaseProcessor._random_flip, {
             'image': images,
@@ -281,7 +296,8 @@ class TrainProcessor(BaseProcessor):
                  aspect_ratio=Range((0.5, 2.0)),
                  delta=Range((-64, 64)),
                  contrast=Range((0.5, 1.5)),
-                 batch_size=64):
+                 batch_size=64,
+                 num_duplicates=1):
 
         super(TrainProcessor, self).__init__(
             net_dim=net_dim,

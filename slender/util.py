@@ -27,6 +27,15 @@ def LOG(value, name=None, fn=tf.identity):
 
 
 class Timer(object):
+    @staticmethod
+    def time(message):
+        def _time(func):
+            def _func(*args, **kwargs):
+                with Timer(message=message):
+                    return func(*args, **kwargs)
+            return _func
+        return _time
+
     def __init__(self, message=''):
         self.message = message
 

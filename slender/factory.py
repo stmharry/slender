@@ -37,6 +37,10 @@ class Task(object):
         else:
             return []
 
+    def join(self):
+        self._event.wait()
+        return self.outputs
+
 
 class BatchFactory(threading.Thread):
     __metaclass__ = abc.ABCMeta
