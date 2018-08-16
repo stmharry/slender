@@ -349,19 +349,34 @@ class ClassifyNet(ResNet50):
         self.labels = blob['labels']
 
         with slim.arg_scope(self.arg_scope), tf.variable_scope(self.__var_scope):
-            self.mean_feat_maps = tf.reduce_mean(
+            self.feat_maps_2048 = tf.reduce_mean(
                 self.feat_maps,
                 (1, 2),
                 keep_dims=True,
-                name='mean_feat_maps',
+                name='feat_maps_2048',
+            )
+            self.feats_2048 = tf.squeeze(
+                self.feat_maps_2048,
+                axis=(1, 2),
+                name='feats_2048',
+            )
+
+            self.feat_maps_64 = slim.conv2d(
+                self.feat_maps_2048,
+                64,
+                (1, 1),
+                activation_fn=tf.nn.relu,
+                normalizer_fn=None,
+                scope='feat_maps_64',
             )
             self.feats = tf.squeeze(
-                self.mean_feat_maps,
+                self.feat_maps_64,
                 axis=(1, 2),
                 name='feats',
             )
+
             self.logits = slim.conv2d(
-                self.mean_feat_maps,
+                self.feat_maps_64,
                 self.num_classes,
                 (1, 1),
                 activation_fn=None,

@@ -57,6 +57,7 @@ class ClassifyProducer(BaseProducer):
                 self.class_names = np.sort([
                     class_name
                     for class_name in os.listdir(image_dir)
+                    if not class_name.startswith('.')
                     if os.path.isdir(os.path.join(image_dir, class_name))
                 ])
                 np.savetxt(self.classname_path, self.class_names, fmt='%s')
