@@ -312,6 +312,7 @@ class ClassifyNet(ResNet50):
                  scopes_to_freeze=None,
                  summary_scalar_attrs=None,
                  flavor=Flavor.SoftMax,
+                 use_bottleneck=False,
                  output_attrs=None,
                  learning_rate=1.0,
                  learning_rate_decay_steps=None,
@@ -341,6 +342,7 @@ class ClassifyNet(ResNet50):
 
         self.num_classes = num_classes
         self.flavor = flavor
+        self.use_bottleneck = use_bottleneck
         self.output_attrs = output_attrs or ClassifyNet.OutputAttrs
 
     def forward(self, blob):
@@ -361,22 +363,29 @@ class ClassifyNet(ResNet50):
                 name='feats_2048',
             )
 
-            self.feat_maps_64 = slim.conv2d(
-                self.feat_maps_2048,
-                64,
-                (1, 1),
-                activation_fn=tf.nn.relu,
-                normalizer_fn=None,
-                scope='feat_maps_64',
-            )
-            self.feats = tf.squeeze(
-                self.feat_maps_64,
-                axis=(1, 2),
-                name='feats',
-            )
+            if self.use_bottleneck:
+                self.feat_maps_64 = slim.conv2d(
+                    self.feat_maps_2048,
+                    64,
+                    (1, 1),
+                    activation_fn=tf.nn.relu,
+                    normalizer_fn=None,
+                    scope='feat_maps_64',
+                )
+                self.feats_64 = tf.squeeze(
+                    self.feat_maps_64,
+                    axis=(1, 2),
+                    name='feats',
+                )
+
+                self.feat_maps = self.feat_maps_64
+                self.feats = self.feats_64
+            else:
+                self.feat_maps = self.feat_maps_2048
+                self.feats = self.feats_2048
 
             self.logits = slim.conv2d(
-                self.feat_maps_64,
+                self.feat_maps,
                 self.num_classes,
                 (1, 1),
                 activation_fn=None,

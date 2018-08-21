@@ -49,7 +49,9 @@ RUN yes "" | ./configure && \
     rm -rf /root/.cache
 
 # SLENDER
-RUN curl -L https://github.com/stmharry/slender/archive/$SLENDER_BRANCH.tar.gz | tar -zx -C /usr/src && \
+RUN curl -L -o slender.zip https://github.com/stmharry/slender/archive/$SLENDER_BRANCH.zip && \
+    unzip slender.zip -d /usr/src && \
+    rm slender.zip && \
     mv /usr/src/slender-* /usr/src/slender/
 
 WORKDIR /
